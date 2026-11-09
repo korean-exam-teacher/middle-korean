@@ -463,3 +463,63 @@ footer.foot { border-top: 1px solid var(--rule); color: var(--ink-3); font-size:
   .crumbs { display: none; }
   @page { size: A4; margin: 14mm 13mm; }
 }
+
+/* ───────── v87: 로그인 없음 · 교사용 보기 · 학습 요소 · 수업 코드 ───────── */
+.brand { display: flex; align-items: baseline; gap: 8px; }
+.brand .stage { font-family: var(--sans); font-size: 12px; color: rgba(244,243,236,.6); letter-spacing: 0; }
+.tv-sw { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; font-size: 13px; color: rgba(244,243,236,.8); }
+.tv-sw input { accent-color: var(--chalk-y); margin: 0; }
+html.tv-on .tv-sw span { color: var(--chalk-y); }
+.who a.hub { border: 1px solid rgba(244,243,236,.35); border-radius: 3px; padding: 1px 8px; font-size: 13px; }
+.who a.hub:hover { color: var(--chalk); border-color: rgba(244,243,236,.7); }
+html:not(.tv-on) .tv-only { display: none !important; }
+@media (max-width: 760px) { .brand .stage { display: none; } .tv-sw span { font-size: 12px; } }
+
+/* 학습 요소 */
+.elem { display: flex; flex-wrap: wrap; align-items: center; gap: 5px 8px; margin-top: 10px; font-size: 14px; }
+.elem .lb { font-size: 12.5px; color: var(--ink-3); margin-right: 2px; }
+.elem span:not(.lb) { color: var(--board); border-bottom: 1px solid var(--rule); }
+.std-sec { margin-bottom: 18px; }
+.std-area { font-size: 16px; margin: 16px 0 6px; color: var(--ink-2); }
+.std-tbl td { vertical-align: top; }
+.chips .chip.on { background: var(--board); color: var(--chalk); border-color: var(--board); }
+.chips .chip small { color: inherit; opacity: .7; }
+
+/* 수업 참여 (첫 화면) */
+.live-join { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin: 14px 0 6px; padding: 12px 16px; border: 1px dashed var(--ink-3); background: var(--paper-2); }
+.live-join .muted { font-size: 13.5px; flex: 1 1 260px; }
+.live-join form { display: flex; gap: 6px; }
+.live-join .input { width: 150px; letter-spacing: 3px; font-weight: 700; }
+
+/* 머리 줄 '수업' 표시 */
+.live-chip { background: var(--chalk-y) !important; color: var(--board) !important; border-radius: 3px; padding: 1px 9px !important; font-size: 13px !important; font-weight: 700; }
+.live-chip.off { background: none !important; color: rgba(244,243,236,.85) !important; border: 1px solid rgba(241,221,120,.6) !important; font-weight: 400; }
+
+/* 수업 패널 */
+.live-panel { position: fixed; right: 16px; bottom: 16px; z-index: 55; width: 340px; max-width: calc(100vw - 32px); background: var(--board); color: var(--chalk); border: 6px solid var(--wood); box-shadow: 0 8px 28px rgba(0,0,0,.25); border-radius: 3px; font-size: 14px; }
+.live-panel .lp-head { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-bottom: 1px solid rgba(244,243,236,.15); }
+.live-panel .lp-code { font-family: var(--sans); font-weight: 700; letter-spacing: 3px; color: var(--chalk-y); font-size: 18px; }
+.live-panel .lp-head .lp-min, .live-panel .lp-head .lp-x { margin-left: auto; background: none; border: 1px solid rgba(244,243,236,.3); color: var(--chalk); border-radius: 3px; padding: 0 8px; font-size: 13px; }
+.live-panel .lp-head .lp-x { margin-left: 0; }
+.live-panel .lp-body { padding: 10px; }
+.live-panel.min .lp-body { display: none; }
+.live-panel .lp-help { margin: 0 0 8px; font-size: 13px; color: rgba(244,243,236,.8); line-height: 1.55; }
+.live-panel .lp-help .warn { color: var(--chalk-p); }
+.live-panel .lp-lb { display: block; font-size: 12.5px; color: rgba(244,243,236,.7); margin-bottom: 4px; }
+.live-panel .lp-memo { width: 100%; background: var(--board-2); color: var(--chalk); border-color: rgba(244,243,236,.25); font-family: var(--hand); font-size: 22px; line-height: 1.35; resize: vertical; }
+.live-panel .lp-ck { display: flex; gap: 6px; align-items: center; margin-top: 8px; font-size: 13.5px; cursor: pointer; }
+.live-panel .lp-ck.sm { margin: 0; font-size: 12.5px; color: rgba(244,243,236,.8); }
+.live-panel .lp-ck input { accent-color: var(--chalk-y); }
+.live-panel .lp-btns { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.live-panel .lp-btns .btn.line { background: none; color: var(--chalk); border-color: rgba(244,243,236,.5); }
+.live-panel .lp-btns .btn.dark { background: var(--chalk-y); color: var(--board); border-color: var(--chalk-y); }
+.live-panel.s { width: 380px; }
+.live-panel .lp-board { font-family: var(--hand); font-size: 26px; line-height: 1.35; min-height: 40px; max-height: 40vh; overflow: auto; white-space: normal; word-break: keep-all; }
+.live-panel.s.empty .lp-board { font-family: var(--sans); font-size: 13px; }
+body.live-on .toast { bottom: 200px; }
+
+/* 수업 중 정답 잠금(학생 화면) */
+body.live-lock .kq-tools [data-exp], body.live-lock .kq-tools [data-showans], body.live-lock .explain, body.live-lock [data-reveal] { display: none !important; }
+.live-panel .lp-head b { white-space: nowrap; }
+.choices button.sel { border-color: var(--ink-3); background: var(--paper-2); }
+@media print { .live-panel, .live-join { display: none !important; } }
