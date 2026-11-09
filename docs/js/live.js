@@ -9,6 +9,9 @@
  * - SITE_CONFIG.LIVE_FIREBASE 에 Firebase 웹 앱 설정이 있으면: 기기 사이 실시간(Firestore + 교사만 익명 인증).
  *   보안 규칙은 firestore.rules (live/{코드} 문서만 쓰고, 고치기·지우기는 연 교사만).
  * - 없으면: 같은 컴퓨터·같은 브라우저의 다른 창끼리만 연결(화면 확인용).
+ *
+ * v91: 다른 갈래(수능·논술·곶·서논술·첫 화면)에서도 쓴다. 판서 도구의 '수업' 단추로 열고 참여한다(Live.menu).
+ *   교사가 다른 갈래로 옮겨 가면 학생 화면도 그 주소로 따라간다(doc.url = 경로 + #).
  */
 (function () {
   var cfg = window.SITE_CONFIG || {};
@@ -18,8 +21,12 @@
   var role = null, code = null, doc = null, unsub = null, follow = true, applying = false, lastHash = "", lastReveal = null, lastLock = false;
   var $ = function (s, r) { return (r || document).querySelector(s); };
   function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
-  function toast(m) { var t = document.getElementById("toast"); if (!t) return; t.textContent = m; t.classList.add("show"); clearTimeout(toast._t); toast._t = setTimeout(function () { t.classList.remove("show"); }, 2200); }
-  function T() { return window.Auth && Auth.teacherView(); }
+  var KT = window.KME_TOOLS || {};
+  function toast(m) { var t = document.getElementById("toast"); if (!t) { t = document.createElement("div"); t.id = "toast"; t.className = "toast kt-toast"; document.body.appendChild(t); } t.textContent = m; t.classList.add("show"); clearTimeout(toast._t); toast._t = setTimeout(function () { t.classList.remove("show"); }, 2200); }
+  function T() { return window.Auth ? Auth.teacherView() : true; }
+  function path() { return location.pathname.replace(/index\.html$/, ""); }
+  function here() { return path() + (KT.keyPath ? location.hash : (location.hash || "#/")); }
+  function inkKey() { return window.Ink ? Ink.key() : ""; }
   function newCode() { var c = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789", s = ""; for (var i = 0; i < 6; i++) s += c[Math.floor(Math.random() * c.length)]; return s; }
   function ssGet() { try { return JSON.parse(sessionStorage.getItem(SS) || "null"); } catch (e) { return null; } }
   function ssSet(v) { try { if (v) sessionStorage.setItem(SS, JSON.stringify(v)); else sessionStorage.removeItem(SS); } catch (e) {} }
@@ -104,18 +111,19 @@
     return DB.get("resources", decodeURIComponent(m[1])).then(function (r) { if (!r) return null; var c = Object.assign({}, r); delete c.file; return c; });
   }
   function sendHash() {
-    var h = location.hash || "#/";
-    if (h === lastHash) return; lastHash = h;
-    resPayload(h).then(function (res) { push({ hash: h, kq: "", scroll: 0, res: res, ink: { h: h, s: window.Ink ? Ink.mine(h) : [] } }); });
+    var u = here(), h = KT.keyPath ? location.hash : (location.hash || "#/");
+    if (u === lastHash) return; lastHash = u;
+    var k = inkKey();
+    resPayload(h).then(function (res) { push({ url: u, hash: h, kq: "", scroll: 0, res: res, ink: { h: k, s: window.Ink ? Ink.mine(k) : [] } }); });
   }
   function openSession() {
     if (!T()) { toast("'교사용 보기'를 켠 뒤 수업을 열 수 있습니다."); return; }
     if (role === "teacher") { renderPanel(); return; }
     var c = newCode(), tries = 0;
-    var data = { hash: location.hash || "#/", memo: "", lock: false, reveal: 0, kq: "", scroll: 0, res: null, follow: true, title: document.title };
+    var data = { url: here(), hash: KT.keyPath ? location.hash : (location.hash || "#/"), memo: "", lock: false, reveal: 0, kq: "", scroll: 0, res: null, follow: true, title: document.title };
     (function attempt() {
       X.create(c, Object.assign({}, data)).then(function () {
-        role = "teacher"; code = c; doc = data; lastHash = data.hash; ssSet({ role: role, code: code });
+        role = "teacher"; code = c; doc = data; lastHash = data.url; ssSet({ role: role, code: code });
         renderPanel(); chip(); toast("수업을 열었습니다. 학생에게 코드 " + c + "를 알려 주세요.");
       }).catch(function (e) {
         if (e.message === "dup" && tries++ < 5) { c = newCode(); return attempt(); }
@@ -187,8 +195,12 @@
     lastReveal = d.reveal || 0;
     if (window.Ink) Ink.showTeacher(d.ink ? d.ink.s : [], d.ink ? d.ink.h : "");
     if (!follow || d.follow === false) return;
+    if (d.url) {
+      var tp = d.url.split("#")[0];
+      if (tp !== path()) { if (!applying) { applying = true; location.href = d.url; } return; }
+    }
     var go = function () { openKq(d.kq); scrollTo(d.scroll); if (window.Ink && d.ink) Ink.showTeacher(d.ink.s, d.ink.h); };
-    if (d.hash && d.hash !== location.hash) {
+    if ((d.hash || location.hash) && d.hash !== location.hash && !(!KT.keyPath && d.hash === "#/" && !location.hash)) {
       var nav = function () { applying = true; location.hash = d.hash; setTimeout(function () { applying = false; go(); }, 450); };
       var m = /^#\/res\/([^/?]+)/.exec(d.hash);
       if (m && d.res && window.DB) DB.set("resources", decodeURIComponent(m[1]), Object.assign({}, d.res, { fromLive: true })).then(nav); else nav();
@@ -210,8 +222,26 @@
     regradeAll();
   }
 
+  /* ───────── 판서 도구의 '수업' 단추 (학습소 밖 갈래) ───────── */
+  function menu(btn) {
+    if (role) { var p0 = $("#live-panel"); if (p0) p0.classList.toggle("min"); else renderPanel(); return; }
+    var m = $("#live-menu");
+    if (m) { m.remove(); return; }
+    m = document.createElement("div"); m.id = "live-menu"; m.className = "live-menu no-print";
+    m.innerHTML = '<form data-live-join><input name="code" maxlength="6" placeholder="수업 코드" autocomplete="off" aria-label="수업 코드"><button type="submit">참여</button></form>' +
+      '<button type="button" class="lm-open" data-act="live-open">이 화면으로 수업 열기</button>';
+    document.body.appendChild(m);
+    var r = btn.getBoundingClientRect();
+    m.style.left = Math.max(8, r.left) + "px"; m.style.bottom = (innerHeight - r.top + 8) + "px";
+    var inp = m.querySelector("input"); inp.focus();
+    setTimeout(function () { document.addEventListener("click", function off(e) { if (!m.contains(e.target) && e.target !== btn) { m.remove(); document.removeEventListener("click", off, true); } }, true); }, 0);
+  }
+  document.addEventListener("submit", function () { var m = $("#live-menu"); if (m) setTimeout(function () { m.remove(); }, 0); }, true);
+  document.addEventListener("click", function (e) { if (e.target.closest("#live-menu [data-act='live-open']")) { var m = $("#live-menu"); if (m) setTimeout(function () { m.remove(); }, 0); } }, true);
+
   /* ───────── 머리 줄의 '수업 중' 표시 ───────── */
   function chip() {
+    if (window.Ink && Ink.refreshBar) Ink.refreshBar();
     var slot = document.getElementById("live-slot"); if (!slot) return;
     slot.innerHTML = role ? '<button type="button" class="live-chip" data-lp-show>수업 ' + esc(code) + "</button>" : (T() ? '<button type="button" class="live-chip off" data-act="live-open">수업 열기</button>' : "");
   }
@@ -251,7 +281,7 @@
     locked: function () { return role === "student" && lastLock; },
     role: function () { return role; },
     code: function () { return code; },
-    open: openSession, join: join, close: closeSession,
+    open: openSession, join: join, close: closeSession, menu: menu,
     server: !!FB
   };
 
@@ -260,7 +290,7 @@
   if (me && me.code) {
     if (me.role === "teacher") {
       role = "teacher"; code = me.code;
-      X.watch(code, function (d) { if (d && role === "teacher") { var first = !doc; doc = d; if (first) renderPanel(); } else if (!d && role === "teacher") closeSession(); });
+      X.watch(code, function (d) { if (d && role === "teacher") { var first = !doc; doc = d; if (first) { renderPanel(); if (d.url !== here()) { lastHash = ""; sendHash(); } } } else if (!d && role === "teacher") closeSession(); });
       setTimeout(chip, 0);
     } else setTimeout(function () { join(me.code); }, 0);
   }

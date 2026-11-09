@@ -4,19 +4,24 @@
  * - 수업 코드로 수업을 연 교사의 판서는 학생 화면에 그대로 나타난다(js/live.js).
  * - 학생이 쓴 것은 학생 화면에만 남고 교사에게 가지 않는다.
  * 좌표는 본문(<main>) 너비를 1000으로 둔 값이라 화면 크기가 달라도 같은 자리에 놓인다.
+ * v91: 다른 갈래(수능·논술·곶·서논술·첫 화면)에서도 쓴다 — window.KME_TOOLS = { root: "body", keyPath: true }
+ *   root: 판서를 얹을 곳(없으면 학습소 본문 "#app main"), keyPath: 화면 키에 주소 경로까지 넣기
  */
 (function () {
   var COLORS = [["#2B2A28", "먹"], ["#2F5D9E", "청화"], ["#B5483B", "진사"], ["hl", "형광"]];
   var LSK = "kme.ink.";
   var on = false, color = COLORS[0][0], mine = [], teacher = [], cur = null, key = "", main = null, svg = null, gT = null, gM = null, bar = null;
   var listeners = [];
-  function pageKey() { return location.hash || "#/"; }
+  var KT = window.KME_TOOLS || {};
+  var ROOT = KT.root || "#app main";
+  function rootEl() { return ROOT === "body" ? document.body : document.querySelector(ROOT); }
+  function pageKey() { return (KT.keyPath ? location.pathname.replace(/index\.html$/, "") : "") + (location.hash || "#/"); }
   function lsGet(k) { try { return JSON.parse(localStorage.getItem(LSK + k) || "[]"); } catch (e) { return []; } }
   function lsSet(k, v) { try { if (v.length) localStorage.setItem(LSK + k, JSON.stringify(v)); else localStorage.removeItem(LSK + k); } catch (e) {} }
   var NS = "http://www.w3.org/2000/svg";
 
   function ensure() {
-    var m = document.querySelector("#app main");
+    var m = rootEl();
     if (!m) { if (svg) svg.style.display = "none"; return false; }
     if (!svg) {
       svg = document.createElementNS(NS, "svg"); svg.setAttribute("class", "ink-layer no-print"); svg.setAttribute("aria-hidden", "true");
@@ -26,12 +31,17 @@
     }
     main = m; svg.style.display = "";
     var r = main.getBoundingClientRect(), w = r.width || 1, hgt = Math.max(main.scrollHeight, r.height);
+    if (main === document.body) { svg.style.height = "0px"; hgt = document.documentElement.scrollHeight; w = document.documentElement.clientWidth; r = { left: -scrollX, top: -scrollY }; }
     svg.style.left = (r.left + scrollX) + "px"; svg.style.top = (r.top + scrollY) + "px";
     svg.style.width = w + "px"; svg.style.height = hgt + "px";
     svg.setAttribute("viewBox", "0 0 1000 " + Math.round(hgt / w * 1000));
     return true;
   }
-  function pt(e) { var r = main.getBoundingClientRect(); return [Math.round((e.clientX - r.left) / r.width * 1000), Math.round((e.clientY - r.top) / r.width * 1000)]; }
+  function pt(e) {
+    var r = main.getBoundingClientRect(), w = r.width;
+    if (main === document.body) { r = { left: -scrollX, top: -scrollY }; w = document.documentElement.clientWidth; }
+    return [Math.round((e.clientX - r.left) / w * 1000), Math.round((e.clientY - r.top) / w * 1000)];
+  }
   function pathD(p) {
     if (p.length < 4) return "M" + p[0] + " " + p[1] + "l0.1 0";
     var d = "M" + p[0] + " " + p[1];
@@ -123,7 +133,8 @@
   function renderBar() {
     if (!bar) { bar = document.createElement("div"); bar.className = "ink-bar no-print"; document.body.appendChild(bar); }
     bar.classList.toggle("on", on);
-    bar.innerHTML = '<button type="button" class="ink-pen" data-ink="toggle" title="판서" aria-pressed="' + on + '">✎</button>' +
+    bar.innerHTML = (KT.classBtn ? '<button type="button" class="ink-class" data-ink="class" title="수업 열기·참여">' + (window.Live && Live.code() ? "수업 " + Live.code() : "수업") + "</button>" : "") +
+      '<button type="button" class="ink-pen" data-ink="toggle" title="판서" aria-pressed="' + on + '">✎</button>' +
       (on ? COLORS.map(function (c) { return '<button type="button" class="ink-c' + (tool === "pen" && c[0] === color ? " sel" : "") + '" data-ink-c="' + c[0] + '" title="' + c[1] + '" style="--c:' + (c[0] === "hl" ? "#F2D65C" : c[0]) + '"></button>'; }).join("") +
         '<span class="ink-sep"></span><button type="button" class="ink-t ink-e' + (tool === "serase" ? " sel" : "") + '" data-ink="serase" title="획 지우개 — 닿은 획을 통째로">' + IC_S + '</button>' +
         '<button type="button" class="ink-t ink-e' + (tool === "perase" ? " sel" : "") + '" data-ink="perase" title="부분 지우개 — 닿은 부분만">' + IC_P + "</button>" +
@@ -136,6 +147,7 @@
     if (b.dataset.inkC) { color = b.dataset.inkC; tool = "pen"; renderBar(); return; }
     var a = b.dataset.ink;
     if (a === "toggle") setOn(!on);
+    else if (a === "class") { if (window.Live && Live.menu) Live.menu(b); }
     else if (a === "serase" || a === "perase") { tool = tool === a ? "pen" : a; renderBar(); }
     else if (a === "undo") { if (hist.length) mine = JSON.parse(hist.pop()); else mine.pop(); lsSet(key, mine); redraw(); emit(true); }
     else if (a === "clear") { if (mine.length) { snap(); mine = []; lsSet(key, mine); redraw(); emit(true); } }
@@ -150,7 +162,7 @@
   }
   var lastH = 0;
   setInterval(function () {
-    var m = document.querySelector("#app main"), h = m ? m.scrollHeight + "/" + Math.round(m.getBoundingClientRect().width) : "";
+    var m = rootEl(), h = m ? (m === document.body ? document.documentElement.scrollHeight : m.scrollHeight) + "/" + Math.round(m.getBoundingClientRect().width) : "";
     if (pageKey() !== key || h !== lastH) { lastH = h; check(); }
   }, 400);
   window.addEventListener("resize", redraw);
@@ -162,6 +174,7 @@
     mine: function (k) { return k === key ? mine.slice() : lsGet(k); },
     /* 학생: 교사 판서 보이기 */
     showTeacher: function (strokes, k) { teacher = (k && k !== pageKey()) ? [] : (strokes || []); if (ensure()) draw(gT, teacher); },
-    key: pageKey
+    key: pageKey,
+    refreshBar: function () { if (bar) renderBar(); }
   };
 })();
