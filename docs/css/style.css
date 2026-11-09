@@ -560,3 +560,23 @@ body.ink-on .ink-layer[data-tool="serase"], body.ink-on .ink-layer[data-tool="pe
 .live-menu button{height:36px;border:1px solid #E7E7E4;border-radius:999px;background:#fff;padding:0 14px;font:inherit;color:#62625E;cursor:pointer}
 .live-menu button:hover{border-color:#2F4F7F;color:#2F4F7F}
 .live-menu .lm-open{color:#2F4F7F}
+
+/* v94: 학력평가 — 원본 쪽 그림 조각 */
+.hp-crop { width: 100%; margin: 0 0 6px; }
+.hp-crop .hp-in { position: relative; overflow: hidden; height: 0; }
+.hp-crop img { position: absolute; max-width: none; height: auto; display: block; }
+.hp-p .hp-crop + .hp-crop, .hp-q .hp-crop + .hp-crop { margin-top: -2px; }
+.ptext.hp-p { max-height: 78vh; overflow: auto; padding-right: 6px; }
+.choices.hp-ch { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.choices.hp-ch li { list-style: none; }
+.choices.hp-ch button { width: auto; min-width: 46px; justify-content: center; font-size: 18px; padding: 4px 10px; border: 1px solid var(--rule); }
+.hp-set { margin: 30px 0 10px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 26px; align-items: start; border-top: 1px solid var(--rule); padding-top: 22px; }
+.hp-set .hp-p { position: sticky; top: 72px; max-height: calc(100vh - 90px); overflow: auto; }
+.hp-solo { margin: 22px 0 10px; max-width: 760px; border-top: 1px solid var(--rule); padding-top: 16px; }
+details.kq.hp-exam { margin-bottom: 10px; }
+@media (max-width: 900px) { .hp-set { grid-template-columns: minmax(0, 1fr); } .hp-set .hp-p { position: static; max-height: none; } }
+.hp-h { font-size: 18px; margin: 22px 0 10px; }
+.hp-tbl td, .hp-tbl th { text-align: center; }
+.hp-tbl small { font-size: 11px; color: var(--ink-3); }
+details.kq.hp-exam > summary .st { display: none; }
+.tb-units { margin-top: 10px; line-height: 1.7; } .tb-units .lb { margin-right: 6px; }
