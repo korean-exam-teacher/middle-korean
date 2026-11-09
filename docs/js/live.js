@@ -1,0 +1,269 @@
+/*
+ * 수업 코드 — 교사 화면 따라가기 · 교사 메모 · 정답 잠금/공개 (2026-11-09 v87)
+ *
+ * 교사('교사용 보기' 켬): 학습 화면의 '이 화면으로 수업 열기' → 6자리 코드.
+ *   교사가 옮겨 다니는 화면(주제·단계 탭·펼친 기출·스크롤 위치)과 메모가 학생 화면에 그대로 나타난다.
+ * 학생: 첫 화면 '수업 참여'에 코드를 넣는다(로그인 없음).
+ *
+ * 연결 방법
+ * - SITE_CONFIG.LIVE_FIREBASE 에 Firebase 웹 앱 설정이 있으면: 기기 사이 실시간(Firestore + 교사만 익명 인증).
+ *   보안 규칙은 firestore.rules (live/{코드} 문서만 쓰고, 고치기·지우기는 연 교사만).
+ * - 없으면: 같은 컴퓨터·같은 브라우저의 다른 창끼리만 연결(화면 확인용).
+ */
+(function () {
+  var cfg = window.SITE_CONFIG || {};
+  var FB = cfg.LIVE_FIREBASE || null;
+  var FB_VER = "10.12.5";
+  var SS = "kme.live.me";             // 이 창의 역할·코드 (새로 고침해도 이어지게)
+  var role = null, code = null, doc = null, unsub = null, follow = true, applying = false, lastHash = "", lastReveal = null, lastLock = false;
+  var $ = function (s, r) { return (r || document).querySelector(s); };
+  function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
+  function toast(m) { var t = document.getElementById("toast"); if (!t) return; t.textContent = m; t.classList.add("show"); clearTimeout(toast._t); toast._t = setTimeout(function () { t.classList.remove("show"); }, 2200); }
+  function T() { return window.Auth && Auth.teacherView(); }
+  function newCode() { var c = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789", s = ""; for (var i = 0; i < 6; i++) s += c[Math.floor(Math.random() * c.length)]; return s; }
+  function ssGet() { try { return JSON.parse(sessionStorage.getItem(SS) || "null"); } catch (e) { return null; } }
+  function ssSet(v) { try { if (v) sessionStorage.setItem(SS, JSON.stringify(v)); else sessionStorage.removeItem(SS); } catch (e) {} }
+
+  /* ───────── 전달 방법 ───────── */
+  function loadScript(src) { return new Promise(function (res, rej) { var s = document.createElement("script"); s.src = src; s.onload = res; s.onerror = function () { rej(new Error("실시간 연결 모듈을 불러오지 못했습니다.")); }; document.head.appendChild(s); }); }
+  var Fire = {
+    ready: null,
+    init: function () {
+      if (this.ready) return this.ready;
+      var base = "https://www.gstatic.com/firebasejs/" + FB_VER + "/";
+      this.ready = loadScript(base + "firebase-app-compat.js").then(function () {
+        return Promise.all([loadScript(base + "firebase-auth-compat.js"), loadScript(base + "firebase-firestore-compat.js")]);
+      }).then(function () {
+        var app = firebase.apps.filter(function (a) { return a.name === "live"; })[0] || firebase.initializeApp(FB, "live");
+        Fire.app = app; Fire.db = app.firestore();
+      });
+      return this.ready;
+    },
+    me: function () {
+      return this.init().then(function () {
+        var a = Fire.app.auth();
+        if (a.currentUser) return a.currentUser.uid;
+        return a.signInAnonymously().then(function (c) { return c.user.uid; });
+      });
+    },
+    ref: function (c) { return Fire.db.collection("live").doc(c); },
+    create: function (c, data) {
+      return this.me().then(function (uid) {
+        return Fire.ref(c).get().then(function (s) {
+          if (s.exists) throw new Error("dup");
+          data.owner = uid; data.ts = Date.now();
+          return Fire.ref(c).set(data);
+        });
+      });
+    },
+    update: function (c, part) { part.ts = Date.now(); return this.init().then(function () { return Fire.ref(c).update(part); }); },
+    remove: function (c) { return this.init().then(function () { return Fire.ref(c).delete(); }); },
+    watch: function (c, cb, err) {
+      var off = null, stop = false;
+      this.init().then(function () { if (!stop) off = Fire.ref(c).onSnapshot(function (s) { cb(s.exists ? s.data() : null); }, err); }).catch(err);
+      return function () { stop = true; if (off) off(); };
+    }
+  };
+  var bc = ("BroadcastChannel" in window) ? new BroadcastChannel("kme-live") : null;
+  var Local = {
+    key: function (c) { return "kme.live.doc." + c; },
+    read: function (c) { try { return JSON.parse(localStorage.getItem(this.key(c)) || "null"); } catch (e) { return null; } },
+    write: function (c, d) { try { if (d) localStorage.setItem(this.key(c), JSON.stringify(d)); else localStorage.removeItem(this.key(c)); } catch (e) {} if (bc) bc.postMessage({ code: c, doc: d }); },
+    create: function (c, data) { if (this.read(c)) return Promise.reject(new Error("dup")); data.owner = "local"; data.ts = Date.now(); this.write(c, data); return Promise.resolve(); },
+    update: function (c, part) { var d = this.read(c); if (!d) return Promise.reject(new Error("수업이 닫혔습니다.")); Object.assign(d, part, { ts: Date.now() }); this.write(c, d); return Promise.resolve(); },
+    remove: function (c) { this.write(c, null); return Promise.resolve(); },
+    watch: function (c, cb) {
+      var self = this;
+      function onMsg(e) { if (e.data && e.data.code === c) cb(e.data.doc); }
+      function onSt(e) { if (e.key === self.key(c)) cb(self.read(c)); }
+      if (bc) bc.addEventListener("message", onMsg);
+      window.addEventListener("storage", onSt);
+      setTimeout(function () { cb(self.read(c)); }, 0);
+      return function () { if (bc) bc.removeEventListener("message", onMsg); window.removeEventListener("storage", onSt); };
+    }
+  };
+  var X = FB ? Fire : Local;
+
+  /* ───────── 교사 ───────── */
+  var pending = {}, timer = null;
+  function push(part, now) {
+    if (role !== "teacher" || !code) return;
+    Object.assign(pending, part);
+    clearTimeout(timer);
+    timer = setTimeout(flush, now ? 0 : 350);
+  }
+  function flush() {
+    var p = pending; pending = {};
+    if (!Object.keys(p).length) return;
+    X.update(code, p).catch(function (e) { toast("수업 화면을 보내지 못했습니다: " + e.message); });
+  }
+  function scrollRatio() { var h = document.documentElement.scrollHeight - innerHeight; return h > 0 ? Math.round(scrollY / h * 1000) / 1000 : 0; }
+  function resPayload(hash) {
+    var m = /^#\/res\/([^/?]+)/.exec(hash || "");
+    if (!m || !window.DB) return Promise.resolve(null);
+    return DB.get("resources", decodeURIComponent(m[1])).then(function (r) { if (!r) return null; var c = Object.assign({}, r); delete c.file; return c; });
+  }
+  function sendHash() {
+    var h = location.hash || "#/";
+    if (h === lastHash) return; lastHash = h;
+    resPayload(h).then(function (res) { push({ hash: h, kq: "", scroll: 0, res: res }); });
+  }
+  function openSession() {
+    if (!T()) { toast("'교사용 보기'를 켠 뒤 수업을 열 수 있습니다."); return; }
+    if (role === "teacher") { renderPanel(); return; }
+    var c = newCode(), tries = 0;
+    var data = { hash: location.hash || "#/", memo: "", lock: false, reveal: 0, kq: "", scroll: 0, res: null, follow: true, title: document.title };
+    (function attempt() {
+      X.create(c, Object.assign({}, data)).then(function () {
+        role = "teacher"; code = c; doc = data; lastHash = data.hash; ssSet({ role: role, code: code });
+        renderPanel(); chip(); toast("수업을 열었습니다. 학생에게 코드 " + c + "를 알려 주세요.");
+      }).catch(function (e) {
+        if (e.message === "dup" && tries++ < 5) { c = newCode(); return attempt(); }
+        toast("수업을 열지 못했습니다: " + e.message);
+      });
+    })();
+  }
+  function closeSession() {
+    if (role === "teacher" && code) X.remove(code).catch(function () {});
+    if (unsub) unsub(); unsub = null;
+    role = null; code = null; doc = null; ssSet(null);
+    document.body.classList.remove("live-lock", "live-on");
+    var p = $("#live-panel"); if (p) p.remove();
+    chip();
+  }
+  function renderPanel() {
+    var p = $("#live-panel");
+    if (!p) { p = document.createElement("aside"); p.id = "live-panel"; p.className = "live-panel no-print"; document.body.appendChild(p); }
+    document.body.classList.add("live-on");
+    if (role === "teacher") {
+      p.className = "live-panel t no-print";
+      p.innerHTML = '<div class="lp-head"><b>수업 중</b><span class="lp-code">' + esc(code) + '</span><button type="button" class="lp-min" data-lp="min" title="접기">–</button></div>' +
+        '<div class="lp-body"><p class="lp-help">학생: 1단계 첫 화면 → <b>수업 참여</b> → 코드 입력' + (FB ? "" : '<br><span class="warn">실시간 서버(Firebase)를 연결하기 전이라 이 컴퓨터의 다른 창에서만 따라옵니다.</span>') + "</p>" +
+        '<label class="lp-lb">학생 화면에 보이는 메모</label><textarea class="input lp-memo" rows="4" placeholder="판서처럼 적으면 학생 화면에 바로 나타납니다.">' + esc(doc && doc.memo || "") + "</textarea>" +
+        '<label class="lp-ck"><input type="checkbox" data-lp="follow"' + (!doc || doc.follow !== false ? " checked" : "") + "> 학생 화면이 내 화면을 따라오기</label>" +
+        '<label class="lp-ck"><input type="checkbox" data-lp="lock"' + (doc && doc.lock ? " checked" : "") + "> 정답 잠금 (학생은 고르기만, 채점·해설은 공개할 때)</label>" +
+        '<div class="lp-btns"><button type="button" class="btn sm dark" data-lp="reveal">정답 공개</button><button type="button" class="btn sm line" data-lp="clear">메모 지우기</button><button type="button" class="btn sm line" data-lp="close">수업 닫기</button></div></div>';
+      var memo = $(".lp-memo", p);
+      memo.oninput = function () { push({ memo: memo.value.slice(0, 4000) }); };
+      p.querySelector('[data-lp="follow"]').onchange = function (e) { push({ follow: e.target.checked }, true); };
+      p.querySelector('[data-lp="lock"]').onchange = function (e) { if (doc) doc.lock = e.target.checked; push({ lock: e.target.checked }, true); };
+      p.querySelector('[data-lp="reveal"]').onclick = function () {
+        var n = ((doc && doc.reveal) || 0) + 1; if (doc) { doc.reveal = n; doc.lock = false; }
+        p.querySelector('[data-lp="lock"]').checked = false;
+        push({ reveal: n, lock: false }, true); toast("학생 화면에 정답을 공개했습니다.");
+      };
+      p.querySelector('[data-lp="clear"]').onclick = function () { memo.value = ""; push({ memo: "" }, true); };
+      p.querySelector('[data-lp="close"]').onclick = function () { if (confirm("수업을 닫을까요? 학생 화면의 연결도 끝납니다.")) { closeSession(); toast("수업을 닫았습니다."); } };
+    } else {
+      p.className = "live-panel s no-print" + (doc && doc.memo ? "" : " empty");
+      p.innerHTML = '<div class="lp-head"><b>수업 중</b><span class="lp-code">' + esc(code) + '</span><label class="lp-ck sm"><input type="checkbox" data-lp="sfollow"' + (follow ? " checked" : "") + '> 선생님 화면 따라가기</label><button type="button" class="lp-min" data-lp="min" title="접기">–</button><button type="button" class="lp-x" data-lp="leave" title="나가기">나가기</button></div>' +
+        '<div class="lp-body"><div class="lp-board">' + (doc && doc.memo ? esc(doc.memo).replace(/\n/g, "<br>") : '<span class="muted">선생님 메모가 여기에 나타납니다.</span>') + "</div></div>";
+      p.querySelector('[data-lp="sfollow"]').onchange = function (e) { follow = e.target.checked; if (follow && doc) apply(doc, true); };
+      p.querySelector('[data-lp="leave"]').onclick = function () { closeSession(); toast("수업에서 나왔습니다."); };
+    }
+    p.querySelector('[data-lp="min"]').onclick = function () { p.classList.toggle("min"); };
+  }
+
+  /* ───────── 학생 ───────── */
+  function join(c) {
+    c = String(c || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+    if (c.length !== 6) { toast("수업 코드 6자리를 넣어 주세요."); return; }
+    if (role === "teacher") { toast("이 창에서는 이미 수업을 열었습니다."); return; }
+    if (unsub) unsub();
+    var first = true;
+    unsub = X.watch(c, function (d) {
+      if (!d) {
+        if (first) toast("없는 수업 코드입니다. 다시 확인해 주세요."); else { toast("선생님이 수업을 닫았습니다."); }
+        closeSession(); return;
+      }
+      if (first) { first = false; role = "student"; code = c; ssSet({ role: role, code: code }); toast("수업에 들어왔습니다."); }
+      var memoChanged = !doc || doc.memo !== d.memo;
+      doc = d; apply(d, false);
+      if (memoChanged || !$("#live-panel")) renderPanel();
+      chip();
+    }, function (e) { toast("수업에 연결하지 못했습니다: " + e.message); closeSession(); });
+  }
+  function apply(d, force) {
+    if (role !== "student") return;
+    var wasLock = lastLock;
+    lastLock = !!d.lock;
+    document.body.classList.toggle("live-lock", lastLock);
+    if (wasLock && !lastLock) regradeAll();
+    if (lastReveal !== null && d.reveal > lastReveal) revealAll();
+    lastReveal = d.reveal || 0;
+    if (!follow || d.follow === false) return;
+    var go = function () { openKq(d.kq); scrollTo(d.scroll); };
+    if (d.hash && d.hash !== location.hash) {
+      var nav = function () { applying = true; location.hash = d.hash; setTimeout(function () { applying = false; go(); }, 450); };
+      var m = /^#\/res\/([^/?]+)/.exec(d.hash);
+      if (m && d.res && window.DB) DB.set("resources", decodeURIComponent(m[1]), Object.assign({}, d.res, { fromLive: true })).then(nav); else nav();
+    } else go();
+  }
+  function openKq(key) {
+    if (!key) return;
+    var el = document.querySelector('details.kq[data-key="' + (window.CSS && CSS.escape ? CSS.escape(key) : key) + '"]');
+    if (el && !el.open) { el.open = true; }
+  }
+  function scrollTo(r) {
+    if (r == null) return;
+    var h = document.documentElement.scrollHeight - innerHeight;
+    if (h > 0) window.scrollTo({ top: Math.round(r * h), behavior: "smooth" });
+  }
+  function regradeAll() { document.querySelectorAll("details.kq").forEach(function (d) { if (d._grade) d._grade(); }); }
+  function revealAll() {
+    if (window.KmeApp && KmeApp.revealAll) KmeApp.revealAll();
+    regradeAll();
+  }
+
+  /* ───────── 머리 줄의 '수업 중' 표시 ───────── */
+  function chip() {
+    var slot = document.getElementById("live-slot"); if (!slot) return;
+    slot.innerHTML = role ? '<button type="button" class="live-chip" data-lp-show>수업 ' + esc(code) + "</button>" : (T() ? '<button type="button" class="live-chip off" data-act="live-open">수업 열기</button>' : "");
+  }
+
+  /* ───────── 연결 ───────── */
+  var _rs = history.replaceState, _ps = history.pushState;
+  history.replaceState = function () { var r = _rs.apply(this, arguments); setTimeout(onUrl, 0); return r; };
+  history.pushState = function () { var r = _ps.apply(this, arguments); setTimeout(onUrl, 0); return r; };
+  function onUrl() { if (role === "teacher") sendHash(); }
+  window.addEventListener("hashchange", function () { if (role === "teacher") sendHash(); });
+  var st = null;
+  window.addEventListener("scroll", function () {
+    if (role !== "teacher") return;
+    clearTimeout(st); st = setTimeout(function () { push({ scroll: scrollRatio() }); }, 250);
+  }, { passive: true });
+  document.addEventListener("toggle", function (e) {
+    var d = e.target; if (role !== "teacher" || !d.matches || !d.matches("details.kq")) return;
+    push({ kq: d.open ? d.dataset.key : "" });
+  }, true);
+  document.addEventListener("click", function (e) {
+    if (e.target.closest('[data-act="live-open"]')) { e.preventDefault(); openSession(); return; }
+    if (e.target.closest("[data-lp-show]")) { var p = $("#live-panel"); if (p) p.classList.remove("min"); else renderPanel(); return; }
+    if (role === "teacher" && e.target.closest('[data-act="reveal"]')) { var n = ((doc && doc.reveal) || 0) + 1; if (doc) doc.reveal = n; push({ reveal: n }, true); }
+  });
+  document.addEventListener("submit", function (e) {
+    var f = e.target.closest("[data-live-join]"); if (!f) return;
+    e.preventDefault(); join(new FormData(f).get("code"));
+  });
+  /* 화면이 새로 그려질 때마다 머리 줄 표시를 다시 */
+  var app = document.getElementById("app");
+  if (app && window.MutationObserver) new MutationObserver(function () { chip(); }).observe(app, { childList: true });
+
+  window.Live = {
+    locked: function () { return role === "student" && lastLock; },
+    role: function () { return role; },
+    code: function () { return code; },
+    open: openSession, join: join, close: closeSession,
+    server: !!FB
+  };
+
+  /* 새로 고침 뒤 이어 가기 */
+  var me = ssGet();
+  if (me && me.code) {
+    if (me.role === "teacher") {
+      role = "teacher"; code = me.code;
+      X.watch(code, function (d) { if (d && role === "teacher") { var first = !doc; doc = d; if (first) renderPanel(); } else if (!d && role === "teacher") closeSession(); });
+      setTimeout(chip, 0);
+    } else setTimeout(function () { join(me.code); }, 0);
+  }
+})();
