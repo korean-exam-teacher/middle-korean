@@ -308,7 +308,7 @@
     lv = lv === "high" ? "high" : "middle";
     document.title = "성취기준 신구 대조 · 국어의 모든 것";
     var head = '<main class="wrap"><div class="crumbs"><a href="#/">홈</a><i>›</i><a href="#/standards">성취기준</a><i>›</i>신구 대조</div><h1 class="title">성취기준 신구 대조</h1>' +
-      '<div class="chips no-print"><a class="chip" href="#/standards">성취기준 목록</a><a class="chip on" href="#/compare/' + lv + '">2015 ↔ 2022 신구 대조</a></div>' +
+      '<div class="chips mode-row no-print"><a class="chip" href="#/standards">성취기준 목록</a><a class="chip on" href="#/compare/' + lv + '">2015 ↔ 2022 신구 대조</a></div>' +
       '<nav class="area-tabs"><a href="#/compare/middle"' + (lv === "middle" ? ' class="on"' : "") + '>중학교</a><a href="#/compare/high"' + (lv === "high" ? ' class="on"' : "") + ">고등학교</a></nav>";
     h(shell("standards", head + '<div class="loading">불러오는 중…</div></main>'));
     loadMaps().then(function () {
@@ -357,7 +357,7 @@
     var cur = sid ? K.subject(sid) : null;
     var html = '<main class="wrap"><div class="crumbs"><a href="#/">홈</a><i>›</i>성취기준·학습 요소</div><h1 class="title">성취기준·학습 요소</h1>' +
       (V89 ? "" : '<p class="sub">2022 개정 국어과 교육과정 중학교 「국어」, 고등학교 공통국어1·2와 선택 과목 9개의 성취기준 ' + tot + '개를 모두 담았습니다. 주제를 누르면 개념 → 기본 → 심화 → 발전으로 공부합니다.' + (t ? "" : " (성취기준 원문은 '교사용 보기'를 켜면 보입니다.)") + "</p>") +
-      '<div class="chips no-print"><a class="chip on" href="#/standards">성취기준 목록</a><a class="chip" href="#/compare/middle">2015 ↔ 2022 신구 대조</a></div>' +
+      '<div class="chips mode-row no-print"><a class="chip on" href="#/standards">성취기준 목록</a><a class="chip" href="#/compare/middle">2015 ↔ 2022 신구 대조</a></div>' +
       '<div class="chips no-print"><a class="chip' + (cur ? "" : " on") + '" href="#/standards">전체</a>' + subs.map(function (s) { return '<a class="chip' + (cur === s ? " on" : "") + '" href="#/standards/' + s.id + '">' + esc(s.name) + " <small>" + s.count + "</small></a>"; }).join("") + "</div>";
     (cur ? [cur] : subs).forEach(function (s) {
       html += '<section class="std-sec"><h2 class="h2">' + esc(s.name) + " <small>" + esc(s.kind) + " · " + esc(s.grade) + " · " + s.count + "개</small></h2>";
