@@ -153,7 +153,7 @@
       } else if (tab === "reset") {
         p = Auth.resetPassword(fd.get("email")).then(function () { msg.className = "msg ok"; msg.textContent = "재설정 메일을 보냈습니다."; });
       } else p = Auth.signIn(fd.get("email"), fd.get("password"));
-      p.then(function () { btn.disabled = false; if (tab !== "reset") location.hash = "#/"; }).catch(function (e) { fail(e.message); });
+      p.then(function () { btn.disabled = false; if (tab !== "reset") { var nx = ""; try { nx = sessionStorage.getItem("kme.next") || ""; sessionStorage.removeItem("kme.next"); } catch (e) {} location.hash = nx || "#/"; } }).catch(function (e) { fail(e.message); });
     };
   }
   function formLogin() {
@@ -1340,6 +1340,8 @@
     var raw = location.hash.replace(/^#\/?/, ""), qi = raw.indexOf("?"), q = qi >= 0 ? raw.slice(qi + 1) : "";
     if (qi >= 0) raw = raw.slice(0, qi);
     var p = raw.split("/").map(function (x) { try { return decodeURIComponent(x); } catch (e) { return x; } });
+    /* 다른 갈래(문제은행의 '개념' 링크 등)에서 바로 들어온 주소는 로그인 뒤에 그대로 연다 */
+    if (!user() && p[0] && ["login", "signup", "reset"].indexOf(p[0]) < 0) { try { sessionStorage.setItem("kme.next", location.hash); } catch (e) {} }
     if (!user()) return viewAuth(p[0] === "signup" || p[0] === "reset" ? p[0] : "login");
     if (!dataReady) return h('<div class="loading">학습 자료를 펼치는 중…</div>');
     switch (p[0]) {
