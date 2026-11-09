@@ -317,7 +317,10 @@
     var n = function (l) { return l.reduce(function (t, s) { return t + s.count; }, 0); };
     var card = function (href, name, meta) { return '<a class="subj c-high" href="' + href + '"><span class="spine"></span><span class="in"><h3>' + name + '</h3><span class="meta">' + meta + "</span></span></a>"; };
     return card("#/school/common", "공통", com.map(function (s) { return esc(s.name); }).join(" · ") + " · 주제 " + n(com)) +
-      card("#/school/elective", "선택", "일반 · 진로 · 융합 " + ele.length + "과목 · 주제 " + n(ele));
+      card("#/school/elective", "선택", "일반 · 진로 · 융합 " + ele.length + "과목 · 주제 " + n(ele)) +
+      card("#/hp/1", "고1 학력평가", "2022~2026 · 6·9·10(11)월") +
+      card("#/hp/2", "고2 학력평가", "2022~2026 · 3·6·9·10(11)월") +
+      card("#/hp/3", "고3 학력평가", "2022~2026 · 3·4(5)·7·10월");
   }
   function viewHigh() {
     document.title = "고등학교 · 국어의 모든 것";
@@ -376,6 +379,7 @@
       (V89 ? "" : '<div class="kw-list">' + (st.keywords || []).map(function (k) { return "<span>" + esc(k) + "</span>"; }).join("") + "</div>") + elemHtml(st);
     if (t) html += '<div class="std-box"><span class="lb">성취기준</span><b>' + esc(st.code) + "</b> " + esc(st.text) +
       (st.verified === false ? '<div class="warn">※ 공식 문서와 문장 대조가 필요합니다.</div>' : "") +
+      tbHtml(st.code) +
       (mid ? "" : '<details class="kq-src-box"><summary>기출 연결 근거</summary><div id="kq-src" class="small">불러오는 중…</div></details>') + "</div>" +
       '<div class="no-print" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:12px"><button class="btn sm dark" data-act="live-open">이 화면으로 수업 열기</button>' +
       '<a class="btn sm line" href="#/print/' + encodeURIComponent(code) + '">학습지 미리보기·인쇄</a><a class="btn sm line" href="#/res-new/' + encodeURIComponent(code) + '">활동 만들기</a><button class="btn sm line" data-act="reveal">답 모두 펼치기</button></div>';
@@ -411,6 +415,14 @@
     fillResources(code);
   }
 
+  /* 교과서 단원(data/textbooks.js) */
+  function tbHtml(code) {
+    var out = [];
+    (window.TEXTBOOKS || []).forEach(function (b) {
+      b.units.forEach(function (u) { if (u.std.indexOf(code) >= 0) out.push(esc(b.pub) + " 「" + esc(b.name) + "」(" + esc(b.author) + ") " + esc(u.u) + " " + esc(u.t) + " <span class=\"muted\">p." + u.p + "</span>"); });
+    });
+    return out.length ? '<div class="small tb-units"><span class="lb">교과서</span> ' + out.join("<br>") + "</div>" : "";
+  }
   /* 근거 자료 표시 */
   function srcMark(st, i) {
     var s = (st.sources || [])[i];
@@ -461,7 +473,13 @@
         if (b.sample) out += '<div class="answer hidden"><b>참고 예시</b> <span class="muted small">(정답이 아니라 한 가지 예입니다)</span><br>' + rich(b.sample) + '</div><button class="btn sm line" style="margin-top:8px" data-reveal>참고 예시 보기</button>';
       }
       return out + "</div>";
-    }).join("");
+    }).join("") + hpList(l, "고1 3월 학력평가");
+  }
+  /* 학력평가 문항 목록(심화·발전) — js/hakpyeong.js 자료로 채운다 */
+  function hpList(l, sub) {
+    if (l.key === "basic") return "";
+    return '<h3 class="hp-h">' + (l.key === "advanced" ? "학력평가로 적용하기" : "학력평가 도전 문항") + ' <small class="muted">' + esc(sub) + "</small></h3>" +
+      '<div class="kq-list hp" data-level="' + l.key + '"><div class="kq-empty">학력평가 문항을 불러오는 중…</div></div>';
   }
 
   /* 고등학교: 기출 + 탐구 과제 */
@@ -478,16 +496,33 @@
       }).join("");
     }
     out += '<h3 style="font-size:18px;margin:18px 0 10px">' + (l.key === "basic" ? "기출로 확인하기" : l.key === "advanced" ? "기출로 적용하기" : "도전 기출") + ' <small class="muted" style="font-weight:400;font-size:14px">평가원 수능·모의평가</small></h3>' +
-      '<div class="kq-list" data-level="' + l.key + '"><div class="kq-empty">기출 문항을 불러오는 중…</div></div>';
+      '<div class="kq-list" data-level="' + l.key + '"><div class="kq-empty">기출 문항을 불러오는 중…</div></div>' + hpList(l, "전국연합학력평가");
     return out;
   }
   function kqSummary(it) {
-    var s = progress.solved[it.key], ex = it.exam.replace("학년도 ", " ").replace("대학수학능력시험", "수능").replace("모의평가", "모평");
+    var s = progress.solved[it.key], ex = it.hp ? it.exam.replace("학력평가", "학평") + (it.area === "화법과 작문" ? "(화작)" : it.area === "언어와 매체" ? "(언매)" : "") : it.exam.replace("학년도 ", " ").replace("대학수학능력시험", "수능").replace("모의평가", "모평");
     return '<details class="kq" data-key="' + esc(it.key) + '"><summary><span class="src">' + esc(ex) + " " + it.no + "번</span>" +
       '<span class="st">' + esc(plain(it.stem).replace(/^\d+\.\s*/, "")) + '</span><span class="res' + (s ? (s.ok ? " o" : " x") : "") + '">' + (s ? (s.ok ? "맞힘" : "틀림") : "") + "</span></summary><div class=\"kq-body\"></div></details>";
   }
   function figImgs(f, alt) { return String(f).split(" ").map(function (x) { return '<img class="fig" src="' + esc(window.Kichul && Kichul.figBase ? Kichul.figBase() : "data/kichul/") + esc(x) + '" alt="' + esc(alt) + '" loading="lazy">'; }).join(""); }
+  /* 원본 쪽 그림에서 한 부분만 보이기(문항 모양 그대로) */
+  function cropHtml(list, alt) {
+    return (list || []).map(function (c) {
+      var w = c.x1 - c.x0, hh = c.y1 - c.y0, px = Math.round(w / c.W * 1400);
+      return '<div class="hp-crop" style="max-width:' + px + 'px"><div class="hp-in" style="padding-top:' + (hh / w * 100).toFixed(3) + '%">' +
+        '<img src="' + esc(c.src) + '" alt="' + esc(alt) + '" loading="lazy" style="width:' + (c.W / w * 100).toFixed(3) + '%;left:' + (-c.x0 / w * 100).toFixed(3) + '%;top:' + (-c.y0 / hh * 100).toFixed(3) + '%"></div></div>';
+    }).join("");
+  }
+  function kqBodyHp(it) {
+    var left = it.passage ? '<div class="ptext hp-p">' + cropHtml(it.passage.crops, it.range + "번 지문") + "</div>" : "";
+    var right = '<div class="hp-q">' + cropHtml(it.crops, it.no + "번 문항") + "</div>";
+    right += '<ul class="choices hp-ch">';
+    for (var n = 1; n <= 5; n++) right += '<li><button type="button" data-n="' + n + '" aria-label="' + n + '번"><span class="cn">' + CIRC[n] + "</span></button></li>";
+    right += '</ul><div class="verdict hidden"></div><div class="kq-tools"><button class="btn sm line" data-exp>해설 보기</button><button class="btn sm line tv-only" data-showans>정답 보기</button></div><div class="explain hidden"></div>';
+    return { two: !!left, html: left ? "<div>" + left + "</div><div>" + right + "</div>" : right };
+  }
   function kqBody(it) {
+    if (it.hp) return kqBodyHp(it);
     var left = "", right = "";
     if (it.passage) {
       var ptxt = bankBr(it.passage.text, it.passage.brackets);
@@ -508,8 +543,20 @@
     right += '</ul><div class="verdict hidden"></div><div class="kq-tools"><button class="btn sm line" data-exp>해설 보기</button>' + '<button class="btn sm line tv-only" data-showans>정답 보기</button>' + '</div><div class="explain hidden"></div>';
     return { two: !!left, html: left ? left + "<div>" + right + "</div>" : right };
   }
+  function fillHp(code) {
+    var lists = $app.querySelectorAll(".kq-list.hp"); if (!lists.length || !window.HP) return;
+    HP.load().then(function () {
+      lists.forEach(function (box) {
+        var keys = HP.forStd(code, box.dataset.level);
+        if (!keys.length) { box.previousElementSibling.hidden = true; box.hidden = true; return; }
+        box.innerHTML = keys.map(function (k) { return kqSummary(HP.item(k)); }).join("");
+        box.querySelectorAll(".kq").forEach(function (d) { d.addEventListener("toggle", function () { if (d.open) openKq(d); }); });
+      });
+    }).catch(function (e) { lists.forEach(function (b) { b.innerHTML = '<div class="kq-empty">학력평가 자료를 불러오지 못했습니다: ' + esc(e.message) + "</div>"; }); });
+  }
+  function isHpKey(k) { return /^\d{4}-\d\d-고\d\|\|/.test(k || ""); }
   function fillKichul(r) {
-    var lists = $app.querySelectorAll(".kq-list"); if (!lists.length) return;
+    var lists = $app.querySelectorAll(".kq-list:not(.hp)"); if (!lists.length) return;
     Kichul.load().then(function () {
       var sel = Kichul.select(r.std, r.subject, r.area);
       var srcBox = document.getElementById("kq-src");
@@ -525,14 +572,16 @@
         box.innerHTML = keys.length ? keys.map(function (k) { return kqSummary(Kichul.item(k)); }).join("") :
           '<div class="kq-empty">' + (box.dataset.level === "extension" ? "이 주제에 더 연결된 기출이 없습니다. 탐구 과제에 집중해 보세요." : "이 주제(2022 개정)에 맞는 평가원 기출이 아직 없습니다. 개념과 탐구 과제로 공부해 보세요.") + "</div>";
       });
-      $app.querySelectorAll(".kq").forEach(function (d) {
+      $app.querySelectorAll(".kq-list:not(.hp) .kq").forEach(function (d) {
         d.addEventListener("toggle", function () { if (d.open) openKq(d); });
       });
     }).catch(function (e) { lists.forEach(function (b) { b.innerHTML = '<div class="kq-empty">기출 자료를 불러오지 못했습니다: ' + esc(e.message) + "</div>"; }); });
   }
   function openKq(d) {
     var b = d.querySelector(".kq-body"); if (b.innerHTML) return;
-    var it = Kichul.item(d.dataset.key), r = kqBody(it);
+    var it = isHpKey(d.dataset.key) ? HP.item(d.dataset.key) : Kichul.item(d.dataset.key);
+    if (it.hp && d.classList.contains("hp-exam")) it.passage = null;   /* 시험지 보기에서는 지문을 위에 한 번만 */
+    var r = kqBody(it);
     b.className = "kq-body" + (r.two ? " two" : ""); b.innerHTML = r.html;
     var prev = progress.solved[it.key];
     function grade(n, silent) {
@@ -570,7 +619,7 @@
       var ex = b.querySelector(".explain");
       if (!ex.classList.contains("hidden")) { ex.classList.add("hidden"); return; }
       ex.classList.remove("hidden"); ex.textContent = "해설을 불러오는 중…";
-      Kichul.loadExplain().then(function (E) { ex.innerHTML = E[it.key] ? bank(E[it.key]) + '<div class="muted small" style="margin-top:6px">해설 출처: 문제은행 수록 「정답 및 해설」 원자료</div>' : "이 문항은 해설이 아직 없습니다. 정답: " + CIRC[it.answer]; });
+      (it.hp ? HP.loadExplain() : Kichul.loadExplain()).then(function (E) { ex.innerHTML = E[it.key] ? (it.hp ? rich(E[it.key]) : bank(E[it.key])) + '<div class="muted small" style="margin-top:6px">해설 출처: ' + (it.hp ? "전국연합학력평가 「정답 및 해설」(시·도 교육청, EBSi 제공)" : "문제은행 수록 「정답 및 해설」 원자료") + "</div>" : "이 문항은 해설이 아직 없습니다. 정답: " + CIRC[it.answer]; });
     };
   }
 
@@ -606,6 +655,7 @@
     act("print", function () { doPrint(false); });
     act("print-ans", function () { doPrint(true); });
     if (!isMiddle(r.subject)) fillKichul(r);
+    fillHp(r.std.code);
   }
 
   /* 수업 코드: 교사가 '정답 공개'를 누르면 학생 화면에서도 답을 펼친다 (js/live.js) */
@@ -615,6 +665,55 @@
       $app.querySelectorAll(".kq").forEach(function (d) { d.open = true; openKq(d); if (d._sel) return; var v = d.querySelector(".verdict"); if (v && /(^| )(o|x)( |$)/.test(v.className)) return; var s = d.querySelector("[data-showans]"); if (s) s.click(); });
     }
   };
+
+  /* ───────── 학력평가: 회차 목록 · 시험지 ───────── */
+  function viewHpList(g) {
+    document.title = "고" + g + " 학력평가 · 국어의 모든 것";
+    var head = '<main class="wrap"><div class="crumbs"><a href="#/">홈</a><i>›</i><a href="#/school/high">고등학교</a><i>›</i>고' + g + ' 학력평가</div><h1 class="title">고' + g + " 학력평가</h1>";
+    h(shell("high", head + '<div class="kq-empty">불러오는 중…</div></main>'));
+    HP.load().then(function () {
+      var L = HP.exams(g).filter(function (e) { return !(g === 1 && e.m === 3); });
+      var years = [], months = [];
+      L.forEach(function (e) { if (years.indexOf(e.y) < 0) years.push(e.y); if (months.indexOf(e.m) < 0) months.push(e.m); });
+      years.sort(function (a, b) { return b - a; }); months.sort(function (a, b) { return a - b; });
+      var t = '<div class="scroll"><table class="tbl hp-tbl"><thead><tr><th>연도</th>' + months.map(function (m) { return "<th>" + m + "월</th>"; }).join("") + "</tr></thead><tbody>" +
+        years.map(function (y) {
+          return "<tr><td><b>" + y + "</b></td>" + months.map(function (m) {
+            var e = L.filter(function (x) { return x.y === y && x.m === m; })[0];
+            return "<td>" + (e ? '<a class="btn sm line" href="#/hp/' + g + "/" + e.id + '">' + m + "월" + (e.nf ? " <small>새 체제</small>" : "") + "</a>" : '<span class="muted">-</span>') + "</td>";
+          }).join("") + "</tr>";
+        }).join("") + "</tbody></table></div>";
+      var note = g === 1 ? '<p class="muted small">고1 3월 학력평가는 중학교 성취기준에 해당해 <a href="#/school/middle">중학교</a> 주제의 심화·발전 단계에 넣었습니다.</p>' : "";
+      h(shell("high", head + t + note + '<p class="muted small">새 체제: 2028학년도 수능(선택 과목 없음)과 같은 문항 배치</p></main>'));
+    }).catch(function (e) { toast(e.message); });
+  }
+  function viewHpExam(id) {
+    HP.load().then(function () {
+      var e = HP.exam(id); if (!e) return notFound();
+      document.title = HP.name(e) + " · 국어의 모든 것";
+      var qs = (location.hash.split("?")[1] || "").replace("s=", ""), sel = e.g === 3 ? (qs === "언매" || qs === "%EC%96%B8%EB%A7%A4" ? "언매" : "화작") : "";
+      var html = '<main class="wrap narrow"><div class="crumbs"><a href="#/">홈</a><i>›</i><a href="#/school/high">고등학교</a><i>›</i><a href="#/hp/' + e.g + '">고' + e.g + " 학력평가</a><i>›</i>" + e.y + "년 " + e.m + "월</div>" +
+        '<h1 class="title">' + esc(HP.name(e)) + "</h1><p class=\"muted small\">" + esc(e.org) + " 주관 · 원본 문제지 그대로" + (e.nf ? " · 새 체제(2028학년도 수능 배치)" : "") + "</p>";
+      if (e.g === 3) html += '<nav class="area-tabs"><a href="#/hp/3/' + id + '?s=화작"' + (sel === "화작" ? ' class="on"' : "") + '>화법과 작문</a><a href="#/hp/3/' + id + '?s=언매"' + (sel === "언매" ? ' class="on"' : "") + ">언어와 매체</a></nav>";
+      var skip = sel === "화작" ? "언어와 매체" : sel === "언매" ? "화법과 작문" : null;
+      /* 지문 묶음: 왼쪽 지문(따라 내려옴), 오른쪽 문항 — 시험지처럼 */
+      var segs = [], cur = null;
+      e.order.forEach(function (k) {
+        if (skip && k.indexOf("||" + skip + "||") > 0) return;
+        if (/~/.test(k.split("||")[2])) { cur = { p: HP.passage(k), items: [] }; segs.push(cur); return; }
+        var it = HP.item(k);
+        if (cur && it.range && cur.p.range === it.range) cur.items.push(it);
+        else { cur = null; segs.push({ p: null, items: [it] }); }
+      });
+      segs.forEach(function (sg) {
+        var q = sg.items.map(function (it) { return kqSummary(it).replace('<details class="kq"', '<details class="kq hp-exam" open'); }).join("");
+        html += sg.p ? '<section class="hp-set"><div class="hp-p">' + cropHtml(sg.p.crops, sg.p.range + "번 지문") + '</div><div class="hp-items">' + q + "</div></section>" :
+          '<section class="hp-solo">' + q + "</section>";
+      });
+      h(shell("high", html + "</main>"));
+      $app.querySelectorAll(".kq").forEach(function (d) { d.addEventListener("toggle", function () { if (d.open) openKq(d); }); openKq(d); });
+    }).catch(function (er) { toast(er.message); });
+  }
 
   /* ───────── 검색 ───────── */
   function viewSearch(q) {
@@ -1475,6 +1574,7 @@
       case "res-edit": return viewResEdit(null, q, p[1]);
       case "mapping": return viewMapping();
       case "standards": return viewStandards(p[1]);
+      case "hp": return p[2] ? viewHpExam(p[2]) : viewHpList(Number(p[1]) || 1);
       case "account": return viewHome();
       default: return notFound();
     }
