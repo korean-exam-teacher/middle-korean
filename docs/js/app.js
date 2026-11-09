@@ -248,7 +248,7 @@
       return '<a class="subj c-' + r.subject.school + '" href="' + link(r.std.code) + '"><span class="spine"></span><span class="in"><span class="kind">' + esc(r.subject.name) + " · " + esc(r.area.name) + '</span><h3 style="font-size:17px">' + esc(r.std.title) + "</h3>" + pips(r.std.code) + "</span></a>";
     }).join("") + "</div>";
     if (V89) {
-      html += '<h2 class="h2">중학교</h2><div class="grid g3">' + K.SUBJECTS.filter(function (s) { return s.school === "middle"; }).map(subjCard).join("") + "</div>" +
+      html += '<h2 class="h2">중학교</h2><div class="grid g3">' + middleCards() + "</div>" +
         '<h2 class="h2">고등학교</h2><div class="grid g3">' + highCards() + "</div>";
     } else K.SCHOOLS.forEach(function (sc) {
       html += '<h2 class="h2">' + esc(sc.name) + (V89 ? "" : " <small>" + esc(sc.note) + "</small>") + '</h2><div class="grid g3">' + K.SUBJECTS.filter(function (s) { return s.school === sc.id; }).map(subjCard).join("") + "</div>";
@@ -287,6 +287,68 @@
     var e = elemsOf(st); if (!e.length) return "";
     return '<div class="elem"><span class="lb">학습 요소</span>' + e.map(function (x) { return "<span>" + esc(x) + "</span>"; }).join("") + "</div>";
   }
+  /* ───────── 2015 ↔ 2022 성취기준 신구 대조 ───────── */
+  var mapsP = null;
+  function loadMaps() {
+    function sc(src) { return new Promise(function (res) { var x = document.createElement("script"); x.src = src + "?v=95"; x.onload = res; x.onerror = res; document.body.appendChild(x); }); }
+    if (!mapsP) mapsP = Promise.all([window.MAP2015 ? 1 : sc("data/mapping-2015.js"), window.MAP2015_MS ? 1 : sc("data/mapping-2015-ms.js")]);
+    return mapsP;
+  }
+  function oldFor(code) {   /* 2022 성취기준 → 2015 대응 목록 */
+    return (window.MAP2015_MS || []).concat(window.MAP2015 || []).filter(function (o) { return (o.to || []).indexOf(code) >= 0; });
+  }
+  function changeOf(o, all) {
+    var to = o.to || [];
+    if (!to.length) return ["gone", "삭제·이동"];
+    if (to.length > 1) return ["split", "나뉨"];
+    var n = all.filter(function (x) { return (x.to || []).indexOf(to[0]) >= 0; }).length;
+    return n > 1 ? ["merge", "통합"] : ["keep", "이어짐"];
+  }
+  function viewCompare(lv) {
+    lv = lv === "high" ? "high" : "middle";
+    document.title = "성취기준 신구 대조 · 국어의 모든 것";
+    var head = '<main class="wrap"><div class="crumbs"><a href="#/">홈</a><i>›</i><a href="#/standards">성취기준</a><i>›</i>신구 대조</div><h1 class="title">성취기준 신구 대조</h1>' +
+      '<div class="chips no-print"><a class="chip" href="#/standards">성취기준 목록</a><a class="chip on" href="#/compare/' + lv + '">2015 ↔ 2022 신구 대조</a></div>' +
+      '<nav class="area-tabs"><a href="#/compare/middle"' + (lv === "middle" ? ' class="on"' : "") + '>중학교</a><a href="#/compare/high"' + (lv === "high" ? ' class="on"' : "") + ">고등학교</a></nav>";
+    h(shell("standards", head + '<div class="loading">불러오는 중…</div></main>'));
+    loadMaps().then(function () {
+      var M = lv === "middle" ? (window.MAP2015_MS || []) : (window.MAP2015 || []);
+      var groups = [], by = {};
+      M.forEach(function (o) { var g = lv === "middle" ? o.area : o.subject; if (!by[g]) { by[g] = []; groups.push(g); } by[g].push(o); });
+      var used = {}; M.forEach(function (o) { (o.to || []).forEach(function (c) { used[c] = 1; }); });
+      var newOnes = K.all().filter(function (r) { return (lv === "middle" ? r.subject.school === "middle" : r.subject.school !== "middle") && !used[r.std.code]; });
+      var cnt = { keep: 0, merge: 0, split: 0, gone: 0 }; M.forEach(function (o) { cnt[changeOf(o, M)[0]]++; });
+      var html = '<p class="sub">' + (lv === "middle" ? "2015 개정 중학교 「국어」 성취기준 " + M.length + "개" : "2015 개정 고등학교 「국어」·「화법과 작문」·「독서」·「언어와 매체」·「문학」 성취기준 " + M.length + "개") +
+        "가 2022 개정 교육과정의 어느 성취기준으로 이어지는지 나란히 보여 줍니다. 2022 쪽을 누르면 그 학습 주제로 갑니다.</p>" +
+        '<div class="cmp-legend small"><span class="cg keep">이어짐 ' + cnt.keep + '</span><span class="cg merge">통합 ' + cnt.merge + '</span><span class="cg split">나뉨 ' + cnt.split + "</span>" + (cnt.gone ? '<span class="cg gone">삭제·이동 ' + cnt.gone + "</span>" : "") + '<span class="cg new">2022 신설 ' + newOnes.length + "</span></div>";
+      groups.forEach(function (g) {
+        html += '<h2 class="h2">' + esc(g) + " <small>" + by[g].length + '개</small></h2><div class="scroll"><table class="tbl cmp-tbl"><thead><tr><th style="width:38%">2015 개정 (구)</th><th style="width:44%">2022 개정 (신)</th><th>달라진 점</th></tr></thead><tbody>' +
+          by[g].map(function (o) {
+            var ch = changeOf(o, M);
+            var right = (o.to || []).map(function (c) {
+              var r = K.find(c);
+              return r ? '<div class="cmp-new"><a href="' + link(c) + '"><b>' + esc(c) + "</b> " + esc(r.std.text) + '</a> <span class="muted">(' + esc(r.subject.name + (r.subject.school === "middle" ? " · " + r.area.name : "")) + ")</span></div>" : '<div class="cmp-new"><b>' + esc(c) + "</b></div>";
+            }).join("") || '<span class="muted">—</span>';
+            return '<tr><td><b>' + esc(o.code) + "</b> " + esc(o.text) + "</td><td>" + right + '</td><td><span class="cg ' + ch[0] + '">' + ch[1] + "</span>" + (o.why ? '<div class="small muted" style="margin-top:4px">' + esc(o.why) + "</div>" : "") + "</td></tr>";
+          }).join("") + "</tbody></table></div>";
+      });
+      if (newOnes.length) {
+        html += '<h2 class="h2">2022에 새로 생긴 성취기준 <small>' + newOnes.length + '개 — 2015에 바로 대응하는 성취기준 없음</small></h2><div class="scroll"><table class="tbl cmp-tbl"><thead><tr><th style="width:38%">2015 개정 (구)</th><th style="width:44%">2022 개정 (신)</th><th>달라진 점</th></tr></thead><tbody>' +
+          newOnes.map(function (r) {
+            return '<tr><td><span class="muted">—</span></td><td><a href="' + link(r.std.code) + '"><b>' + esc(r.std.code) + "</b> " + esc(r.std.text) + '</a> <span class="muted">(' + esc(r.subject.name + (r.subject.school === "middle" ? " · " + r.area.name : "")) + ')</span></td><td><span class="cg new">신설</span></td></tr>';
+          }).join("") + "</tbody></table></div>";
+      }
+      html += '<p class="small muted" style="margin-top:18px">' + (lv === "middle" ?
+        "2015 성취기준 원문: 2015 개정 국어과 교육과정(교육부 고시 제2015-74호 [별책 5]) — 공개 자료 두 가지로 문장 대조. 대응 관계는 성취기준 내용을 보고 짝지은 것으로, 교사 검토가 필요합니다." :
+        "2015 성취기준 원문: 교육부 [고등] 2015 개정 국어과 평가기준. 대응 관계는 평가원 기출 연결에 쓰는 매핑 표(교사 자료실 › 성취기준 매핑)와 같습니다.") + "</p>";
+      h(shell("standards", head + html + "</main>"));
+    });
+  }
+  function oldStdHtml(code) {
+    var L = oldFor(code); if (!L.length) return '<span class="lb">2015 개정</span> <span class="muted">대응하는 2015 성취기준 없음(2022 신설)</span>';
+    return '<span class="lb">2015 개정</span> ' + L.map(function (o) { return "<b>" + esc(o.code) + "</b> " + esc(o.text); }).join("<br>") + ' <a href="#/compare/' + (/^\[9/.test(code) ? "middle" : "high") + '">신구 대조표</a>';
+  }
+
   /* 성취기준·학습 요소 한눈에 보기 (#/standards, #/standards/<과목>) */
   function viewStandards(sid) {
     document.title = "성취기준·학습 요소 · 국어의 모든 것";
@@ -295,6 +357,7 @@
     var cur = sid ? K.subject(sid) : null;
     var html = '<main class="wrap"><div class="crumbs"><a href="#/">홈</a><i>›</i>성취기준·학습 요소</div><h1 class="title">성취기준·학습 요소</h1>' +
       (V89 ? "" : '<p class="sub">2022 개정 국어과 교육과정 중학교 「국어」, 고등학교 공통국어1·2와 선택 과목 9개의 성취기준 ' + tot + '개를 모두 담았습니다. 주제를 누르면 개념 → 기본 → 심화 → 발전으로 공부합니다.' + (t ? "" : " (성취기준 원문은 '교사용 보기'를 켜면 보입니다.)") + "</p>") +
+      '<div class="chips no-print"><a class="chip on" href="#/standards">성취기준 목록</a><a class="chip" href="#/compare/middle">2015 ↔ 2022 신구 대조</a></div>' +
       '<div class="chips no-print"><a class="chip' + (cur ? "" : " on") + '" href="#/standards">전체</a>' + subs.map(function (s) { return '<a class="chip' + (cur === s ? " on" : "") + '" href="#/standards/' + s.id + '">' + esc(s.name) + " <small>" + s.count + "</small></a>"; }).join("") + "</div>";
     (cur ? [cur] : subs).forEach(function (s) {
       html += '<section class="std-sec"><h2 class="h2">' + esc(s.name) + " <small>" + esc(s.kind) + " · " + esc(s.grade) + " · " + s.count + "개</small></h2>";
@@ -322,6 +385,15 @@
       card("#/hp/2", "고2 학력평가", "2022~2026 · 3·6·9·10(11)월") +
       card("#/hp/3", "고3 학력평가", "2022~2026 · 3·4(5)·7·10월");
   }
+  /* 중학교: 국어 영역별 카드(듣기·말하기 · 읽기 · 쓰기 · 문법 · 문학 · 매체) */
+  function middleCards() {
+    var s = K.subject("ms-korean"); if (!s) return "";
+    return s.areas.map(function (a) {
+      var dn = 0; a.standards.forEach(function (st) { var d = doneOf(st.code); if (d.b && d.a && d.e) dn++; });
+      return '<a class="subj c-middle" href="#/subject/' + s.id + "/" + encodeURIComponent(a.code) + '"><span class="spine"></span><span class="in"><h3>' + esc(a.name) + '</h3><span class="meta">주제 ' + a.standards.length + "</span>" +
+        (!T() ? '<div class="bar"><i style="width:' + Math.round(dn / Math.max(1, a.standards.length) * 100) + '%"></i></div>' : "") + "</span></a>";
+    }).join("");
+  }
   function viewHigh() {
     document.title = "고등학교 · 국어의 모든 것";
     h(shell("high", '<main class="wrap"><div class="crumbs"><a href="#/">홈</a><i>›</i>고등학교</div><h1 class="title">고등학교</h1><div class="grid g3">' + highCards() + "</div></main>"));
@@ -333,6 +405,7 @@
     var groups = {}, order = [];
     K.SUBJECTS.filter(function (s) { return s.school === id; }).forEach(function (s) { if (!groups[s.kind]) { groups[s.kind] = []; order.push(s.kind); } groups[s.kind].push(s); });
     var high = id !== "middle";
+    if (!high && V89) { h(shell(id, '<main class="wrap"><div class="crumbs"><a href="#/">홈</a><i>›</i>' + esc(sc.name) + '</div><h1 class="title">' + esc(sc.name) + '</h1><div class="grid g3">' + middleCards() + "</div></main>")); return; }
     var html = '<main class="wrap"><div class="crumbs"><a href="#/">홈</a><i>›</i>' + (high ? '<a href="#/school/high">고등학교</a><i>›</i>' + (id === "common" ? "공통" : "선택") : esc(sc.name)) + '</div><h1 class="title">' + (V89 && high ? (id === "common" ? "공통" : "선택") : esc(sc.name)) + "</h1>" + (V89 ? "" : '<p class="sub">' + esc(sc.note) + "</p>");
     order.forEach(function (g) { html += (order.length > 1 || !V89 ? '<h2 class="h2">' + esc(g) + "</h2>" : "") + '<div class="grid g3">' + groups[g].map(subjCard).join("") + "</div>"; });
     h(shell(id, html + "</main>"));
@@ -379,7 +452,7 @@
       (V89 ? "" : '<div class="kw-list">' + (st.keywords || []).map(function (k) { return "<span>" + esc(k) + "</span>"; }).join("") + "</div>") + elemHtml(st);
     if (t) html += '<div class="std-box"><span class="lb">성취기준</span><b>' + esc(st.code) + "</b> " + esc(st.text) +
       (st.verified === false ? '<div class="warn">※ 공식 문서와 문장 대조가 필요합니다.</div>' : "") +
-      tbHtml(st.code) +
+      tbHtml(st.code) + '<div class="small tb-units" id="old-std"></div>' +
       (mid ? "" : '<details class="kq-src-box"><summary>기출 연결 근거</summary><div id="kq-src" class="small">불러오는 중…</div></details>') + "</div>" +
       '<div class="no-print" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:12px"><button class="btn sm dark" data-act="live-open">이 화면으로 수업 열기</button>' +
       '<a class="btn sm line" href="#/print/' + encodeURIComponent(code) + '">학습지 미리보기·인쇄</a><a class="btn sm line" href="#/res-new/' + encodeURIComponent(code) + '">활동 만들기</a><button class="btn sm line" data-act="reveal">답 모두 펼치기</button></div>';
@@ -513,13 +586,49 @@
         '<img src="' + esc(c.src) + '" alt="' + esc(alt) + '" loading="lazy" style="width:' + (c.W / w * 100).toFixed(3) + '%;left:' + (-c.x0 / w * 100).toFixed(3) + '%;top:' + (-c.y0 / hh * 100).toFixed(3) + '%"></div></div>';
     }).join("");
   }
+  /* 학력평가 지문: 글자로(밑줄·글자 상자·꺾쇠). 그림·표가 있는 지문은 원본 그림을 먼저, 글자로 바꿔 볼 수 있게 */
+  function hpPassageHtml(p, alt) {
+    var txt = p.text ? bankBr(p.text, p.brackets) : "";
+    if (p.isNote && !p.figCrops) return p.label ? '<div class="bogi"><span class="bl">&lt; ' + esc(p.label) + " &gt;</span>" + txt + "</div>" : '<div class="ptext">' + txt + "</div>";
+    if (p.figCrops) return '<div class="pfig-bar"><span>원본 문제지 그림</span>' + (txt ? '<button type="button" class="btn sm line" data-pfig>글자로 보기</button>' : "") + "</div>" +
+      '<div class="ptext pfig">' + cropHtml(p.figCrops, alt) + "</div>" + (txt ? '<div class="ptext hidden' + (p.poem ? " poem" : "") + '" data-ptext>' + txt + "</div>" : "");
+    return '<div class="ptext' + (p.poem ? " poem" : "") + '">' + txt + "</div>";
+  }
+  function bindPfig(root) {
+    root.querySelectorAll("[data-pfig]").forEach(function (pt) {
+      if (pt._b) return; pt._b = 1;
+      var box = pt.closest(".pfig-wrap") || pt.parentNode.parentNode;
+      pt.onclick = function () {
+        var fig = box.querySelector(".pfig"), txt = box.querySelector("[data-ptext]"), toText = txt.classList.contains("hidden");
+        txt.classList.toggle("hidden", !toText); fig.classList.toggle("hidden", toText);
+        pt.textContent = toText ? "원본 그림으로 보기" : "글자로 보기";
+        box.querySelector(".pfig-bar span").textContent = toText ? "글자로 보는 중 (그림은 빠져 있음)" : "원본 문제지 그림";
+      };
+    });
+  }
+  function hpNoteHtml(n) {
+    return '<div class="hp-note pfig-wrap"><div class="hp-ph">※ ' + esc(n.head) + "</div>" + hpPassageHtml(n, n.range + "번 자료") + "</div>";
+  }
+  /* 묶음 안 문항들(지문은 왼쪽에 한 번) — 공통 자료(※)는 처음 쓰는 문항 앞에 한 번 */
+  function hpItemsHtml(items) {
+    var seen = {};
+    return items.map(function (it) {
+      var pre = "";
+      if (it.note && !seen[it.note.key]) { seen[it.note.key] = 1; pre = hpNoteHtml(it.note); }
+      return pre + kqSummary(it).replace('<details class="kq"', '<details class="kq hp-exam" open');
+    }).join("");
+  }
   function kqBodyHp(it) {
-    var left = it.passage ? '<div class="ptext hp-p">' + cropHtml(it.passage.crops, it.range + "번 지문") + "</div>" : "";
-    var right = '<div class="hp-q">' + cropHtml(it.crops, it.no + "번 문항") + "</div>";
-    right += '<ul class="choices hp-ch">';
-    for (var n = 1; n <= 5; n++) right += '<li><button type="button" data-n="' + n + '" aria-label="' + n + '번"><span class="cn">' + CIRC[n] + "</span></button></li>";
+    var left = it.passage ? '<div class="pfig-wrap">' + (it.passage.isNote ? '<div class="hp-ph">※ ' + esc(it.passage.head) + "</div>" : "") + hpPassageHtml(it.passage, it.range + "번 지문") + "</div>" : "";
+    var right = (it.note ? hpNoteHtml(it.note) : "") + (it.stemCrops ? '<div class="hp-fig">' + cropHtml(it.stemCrops, it.no + "번 발문") + "</div>" : '<p class="stem">' + bank(it.stem) + (it.score === 3 ? " [3점]" : "") + "</p>");
+    if (it.bogiCrops) right += '<div class="hp-fig">' + cropHtml(it.bogiCrops, it.no + "번 자료") + "</div>";
+    else if (it.bogi || it.bogiLabel) right += '<div class="bogi">' + (it.bogiLabel ? '<span class="bl">&lt; ' + esc(it.bogiLabel) + " &gt;</span>" : "") + bankBr(it.bogi, it.bogiBrackets) + "</div>";
+    if (it.choiceCrops) right += '<div class="hp-fig">' + cropHtml(it.choiceCrops, it.no + "번 선택지") + "</div>";
+    var onlyNum = it.choiceCrops && !(it.choices && it.choices.length === 5);
+    right += '<ul class="choices' + (onlyNum ? " hp-ch" : "") + '">';
+    for (var n = 1; n <= 5; n++) right += '<li><button type="button" data-n="' + n + '"' + (onlyNum ? ' aria-label="' + n + '번"' : "") + '><span class="cn">' + CIRC[n] + "</span>" + (onlyNum ? "" : "<span>" + bank(it.choices[n - 1] || "") + "</span>") + "</button></li>";
     right += '</ul><div class="verdict hidden"></div><div class="kq-tools"><button class="btn sm line" data-exp>해설 보기</button><button class="btn sm line tv-only" data-showans>정답 보기</button></div><div class="explain hidden"></div>';
-    return { two: !!left, html: left ? "<div>" + left + "</div><div>" + right + "</div>" : right };
+    return { two: !!left, html: left ? left + "<div>" + right + "</div>" : right };
   }
   function kqBody(it) {
     if (it.hp) return kqBodyHp(it);
@@ -546,14 +655,39 @@
   function fillHp(code) {
     var lists = $app.querySelectorAll(".kq-list.hp"); if (!lists.length || !window.HP) return;
     HP.load().then(function () {
+      var all = []; lists.forEach(function (box) { all = all.concat(HP.forStd(code, box.dataset.level)); });
+      return HP.loadFor(all);
+    }).then(function () {
       lists.forEach(function (box) {
         var keys = HP.forStd(code, box.dataset.level);
         if (!keys.length) { box.previousElementSibling.hidden = true; box.hidden = true; return; }
-        box.innerHTML = keys.map(function (k) { return kqSummary(HP.item(k)); }).join("");
+        /* 같은 지문의 문항은 한 묶음으로(지문은 한 번만) */
+        var groups = [], byP = {};
+        keys.forEach(function (k) {
+          var it = HP.item(k), pk = it.passage ? it.passage.key : null;
+          if (pk && byP[pk]) { byP[pk].keys.push(k); return; }
+          var g = { p: pk, keys: [k] }; groups.push(g); if (pk) byP[pk] = g;
+        });
+        box.innerHTML = groups.map(function (g) { return g.p ? hpGroupSummary(g.p, g.keys) : kqSummary(HP.item(g.keys[0])); }).join("");
         box.querySelectorAll(".kq").forEach(function (d) { d.addEventListener("toggle", function () { if (d.open) openKq(d); }); });
       });
     }).catch(function (e) { lists.forEach(function (b) { b.innerHTML = '<div class="kq-empty">학력평가 자료를 불러오지 못했습니다: ' + esc(e.message) + "</div>"; }); });
   }
+  function hpGroupSummary(pkey, keys) {
+    var it0 = HP.item(keys[0]), ex = it0.exam.replace("학력평가", "학평") + (it0.area === "화법과 작문" ? "(화작)" : it0.area === "언어와 매체" ? "(언매)" : "");
+    var nos = keys.map(function (k) { return HP.item(k).no; }), done = keys.filter(function (k) { return progress.solved[k]; }).length;
+    return '<details class="kq hp-grp" data-p="' + esc(pkey) + '" data-keys="' + esc(keys.join(",")) + '"><summary><span class="src">' + esc(ex) + " " + nos.join("·") + "번</span>" +
+      '<span class="st">' + (keys.length > 1 ? "지문 하나 · " + keys.length + "문항 — " : "") + esc(plain(it0.stem)) + '</span><span class="res">' + (done ? done + "/" + keys.length : "") + "</span></summary><div class=\"kq-body\"></div></details>";
+  }
+  function openGrp(d) {
+    var b = d.querySelector(".kq-body"); if (b.innerHTML) return;
+    var keys = d.dataset.keys.split(","), p = HP.item(keys[0]).passage;
+    b.innerHTML = '<section class="hp-set in-grp"><div class="hp-p pfig-wrap"><div class="hp-ph">' + (p.isNote ? "※ " : "[" + esc(p.range) + "] ") + esc(p.head) + "</div>" + hpPassageHtml(p, p.range + "번 지문") + '</div><div class="hp-items">' +
+      hpItemsHtml(keys.map(HP.item)) + "</div></section>";
+    bindPfig(b);
+    b.querySelectorAll(".kq").forEach(function (x) { x.addEventListener("toggle", function () { if (x.open) openKq(x); }); openKq(x); });
+  }
+  function openGroups() { $app.querySelectorAll(".hp-grp").forEach(function (g) { g.open = true; openGrp(g); }); }
   function isHpKey(k) { return /^\d{4}-\d\d-고\d\|\|/.test(k || ""); }
   function fillKichul(r) {
     var lists = $app.querySelectorAll(".kq-list:not(.hp)"); if (!lists.length) return;
@@ -578,9 +712,10 @@
     }).catch(function (e) { lists.forEach(function (b) { b.innerHTML = '<div class="kq-empty">기출 자료를 불러오지 못했습니다: ' + esc(e.message) + "</div>"; }); });
   }
   function openKq(d) {
+    if (d.classList.contains("hp-grp")) return openGrp(d);
     var b = d.querySelector(".kq-body"); if (b.innerHTML) return;
     var it = isHpKey(d.dataset.key) ? HP.item(d.dataset.key) : Kichul.item(d.dataset.key);
-    if (it.hp && d.classList.contains("hp-exam")) it.passage = null;   /* 시험지 보기에서는 지문을 위에 한 번만 */
+    if (it.hp && d.classList.contains("hp-exam")) { it.passage = null; it.note = null; }   /* 시험지 보기에서는 지문을 위에 한 번만 */
     var r = kqBody(it);
     b.className = "kq-body" + (r.two ? " two" : ""); b.innerHTML = r.html;
     var prev = progress.solved[it.key];
@@ -608,7 +743,8 @@
     if (prev) grade(prev.n, true);
     b.querySelectorAll(".choices button").forEach(function (x) { x.onclick = function () { grade(Number(x.dataset.n)); }; });
     var sa = b.querySelector("[data-showans]"); if (sa) sa.onclick = function () { grade(it.answer, true); };
-    var pt = b.querySelector("[data-pfig]");
+    var pt = it.hp ? null : b.querySelector("[data-pfig]");
+    if (it.hp) bindPfig(b);
     if (pt) pt.onclick = function () {
       var fig = b.querySelector(".pfig"), txt = b.querySelector("[data-ptext]"), toText = txt.classList.contains("hidden");
       txt.classList.toggle("hidden", !toText); fig.classList.toggle("hidden", toText);
@@ -644,10 +780,12 @@
     });
     var act = function (n, f) { var b = $app.querySelector('[data-act="' + n + '"]'); if (b) b.onclick = f; };
     act("reveal", function () {
+      openGroups();
       $app.querySelectorAll(".answer").forEach(function (x) { x.classList.remove("hidden"); });
       $app.querySelectorAll(".kq").forEach(function (d) { d.open = true; openKq(d); var s = d.querySelector("[data-showans]"); if (s) s.click(); });
     });
     function doPrint(ans) {
+      openGroups();
       $app.querySelectorAll(".kq").forEach(function (d) { openKq(d); d.open = true; });
       document.body.classList.add("print-all"); if (ans) document.body.classList.add("print-answers");
       setTimeout(function () { window.print(); document.body.classList.remove("print-all", "print-answers"); }, 300);
@@ -656,11 +794,13 @@
     act("print-ans", function () { doPrint(true); });
     if (!isMiddle(r.subject)) fillKichul(r);
     fillHp(r.std.code);
+    var ob = document.getElementById("old-std"); if (ob) loadMaps().then(function () { ob.innerHTML = oldStdHtml(code); });
   }
 
   /* 수업 코드: 교사가 '정답 공개'를 누르면 학생 화면에서도 답을 펼친다 (js/live.js) */
   window.KmeApp = {
     revealAll: function () {
+      openGroups();
       $app.querySelectorAll(".answer").forEach(function (x) { x.classList.remove("hidden"); });
       $app.querySelectorAll(".kq").forEach(function (d) { d.open = true; openKq(d); if (d._sel) return; var v = d.querySelector(".verdict"); if (v && /(^| )(o|x)( |$)/.test(v.className)) return; var s = d.querySelector("[data-showans]"); if (s) s.click(); });
     }
@@ -688,29 +828,34 @@
     }).catch(function (e) { toast(e.message); });
   }
   function viewHpExam(id) {
-    HP.load().then(function () {
+    HP.load().then(function () { return HP.exam(id) ? HP.loadText(id) : null; }).then(function () {
       var e = HP.exam(id); if (!e) return notFound();
       document.title = HP.name(e) + " · 국어의 모든 것";
-      var qs = (location.hash.split("?")[1] || "").replace("s=", ""), sel = e.g === 3 ? (qs === "언매" || qs === "%EC%96%B8%EB%A7%A4" ? "언매" : "화작") : "";
-      var html = '<main class="wrap narrow"><div class="crumbs"><a href="#/">홈</a><i>›</i><a href="#/school/high">고등학교</a><i>›</i><a href="#/hp/' + e.g + '">고' + e.g + " 학력평가</a><i>›</i>" + e.y + "년 " + e.m + "월</div>" +
-        '<h1 class="title">' + esc(HP.name(e)) + "</h1><p class=\"muted small\">" + esc(e.org) + " 주관 · 원본 문제지 그대로" + (e.nf ? " · 새 체제(2028학년도 수능 배치)" : "") + "</p>";
+      var qs = decodeURIComponent((location.hash.split("?")[1] || "").replace("s=", "")), sel = e.g === 3 ? (qs === "언매" ? "언매" : "화작") : "";
+      var html = '<main class="wrap"><div class="crumbs"><a href="#/">홈</a><i>›</i><a href="#/school/high">고등학교</a><i>›</i><a href="#/hp/' + e.g + '">고' + e.g + " 학력평가</a><i>›</i>" + e.y + "년 " + e.m + "월</div>" +
+        '<h1 class="title">' + esc(HP.name(e)) + "</h1><p class=\"muted small\">" + esc(e.org) + " 주관 · 원본 문제지에서 글자로 옮김(그림·표는 원본 그림)" + (e.nf ? " · 새 체제(2028학년도 수능 배치)" : "") + "</p>";
       if (e.g === 3) html += '<nav class="area-tabs"><a href="#/hp/3/' + id + '?s=화작"' + (sel === "화작" ? ' class="on"' : "") + '>화법과 작문</a><a href="#/hp/3/' + id + '?s=언매"' + (sel === "언매" ? ' class="on"' : "") + ">언어와 매체</a></nav>";
       var skip = sel === "화작" ? "언어와 매체" : sel === "언매" ? "화법과 작문" : null;
-      /* 지문 묶음: 왼쪽 지문(따라 내려옴), 오른쪽 문항 — 시험지처럼 */
+      /* 지문 묶음: 왼쪽 지문(따라 내려옴), 오른쪽 문항 — 지문은 한 번만 */
       var segs = [], cur = null;
       e.order.forEach(function (k) {
         if (skip && k.indexOf("||" + skip + "||") > 0) return;
         if (/~/.test(k.split("||")[2])) { cur = { p: HP.passage(k), items: [] }; segs.push(cur); return; }
         var it = HP.item(k);
         if (cur && it.range && cur.p.range === it.range) cur.items.push(it);
+        else if (it.passage && it.passage.isNote) {
+          if (cur && cur.p.key === it.passage.key) cur.items.push(it);
+          else { cur = { p: it.passage, items: [it] }; segs.push(cur); }
+        }
         else { cur = null; segs.push({ p: null, items: [it] }); }
       });
       segs.forEach(function (sg) {
-        var q = sg.items.map(function (it) { return kqSummary(it).replace('<details class="kq"', '<details class="kq hp-exam" open'); }).join("");
-        html += sg.p ? '<section class="hp-set"><div class="hp-p">' + cropHtml(sg.p.crops, sg.p.range + "번 지문") + '</div><div class="hp-items">' + q + "</div></section>" :
+        var q = sg.p && sg.p.isNote ? sg.items.map(function (it) { return kqSummary(it).replace('<details class="kq"', '<details class="kq hp-exam" open'); }).join("") : hpItemsHtml(sg.items);
+        html += sg.p ? '<section class="hp-set"><div class="hp-p pfig-wrap"><div class="hp-ph">' + (sg.p.isNote ? "※ " : "[" + esc(sg.p.range) + "] ") + esc(sg.p.head) + "</div>" + hpPassageHtml(sg.p, sg.p.range + "번 지문") + '</div><div class="hp-items">' + q + "</div></section>" :
           '<section class="hp-solo">' + q + "</section>";
       });
       h(shell("high", html + "</main>"));
+      bindPfig($app);
       $app.querySelectorAll(".kq").forEach(function (d) { d.addEventListener("toggle", function () { if (d.open) openKq(d); }); openKq(d); });
     }).catch(function (er) { toast(er.message); });
   }
@@ -1574,6 +1719,7 @@
       case "res-edit": return viewResEdit(null, q, p[1]);
       case "mapping": return viewMapping();
       case "standards": return viewStandards(p[1]);
+      case "compare": return viewCompare(p[1]);
       case "hp": return p[2] ? viewHpExam(p[2]) : viewHpList(Number(p[1]) || 1);
       case "account": return viewHome();
       default: return notFound();
