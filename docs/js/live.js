@@ -106,7 +106,7 @@
   function sendHash() {
     var h = location.hash || "#/";
     if (h === lastHash) return; lastHash = h;
-    resPayload(h).then(function (res) { push({ hash: h, kq: "", scroll: 0, res: res }); });
+    resPayload(h).then(function (res) { push({ hash: h, kq: "", scroll: 0, res: res, ink: { h: h, s: window.Ink ? Ink.mine(h) : [] } }); });
   }
   function openSession() {
     if (!T()) { toast("'교사용 보기'를 켠 뒤 수업을 열 수 있습니다."); return; }
@@ -137,14 +137,11 @@
     document.body.classList.add("live-on");
     if (role === "teacher") {
       p.className = "live-panel t no-print";
-      p.innerHTML = '<div class="lp-head"><b>수업 중</b><span class="lp-code">' + esc(code) + '</span><button type="button" class="lp-min" data-lp="min" title="접기">–</button></div>' +
-        '<div class="lp-body"><p class="lp-help">학생: 1단계 첫 화면 → <b>수업 참여</b> → 코드 입력' + (FB ? "" : '<br><span class="warn">실시간 서버(Firebase)를 연결하기 전이라 이 컴퓨터의 다른 창에서만 따라옵니다.</span>') + "</p>" +
-        '<label class="lp-lb">학생 화면에 보이는 메모</label><textarea class="input lp-memo" rows="4" placeholder="판서처럼 적으면 학생 화면에 바로 나타납니다.">' + esc(doc && doc.memo || "") + "</textarea>" +
-        '<label class="lp-ck"><input type="checkbox" data-lp="follow"' + (!doc || doc.follow !== false ? " checked" : "") + "> 학생 화면이 내 화면을 따라오기</label>" +
-        '<label class="lp-ck"><input type="checkbox" data-lp="lock"' + (doc && doc.lock ? " checked" : "") + "> 정답 잠금 (학생은 고르기만, 채점·해설은 공개할 때)</label>" +
-        '<div class="lp-btns"><button type="button" class="btn sm dark" data-lp="reveal">정답 공개</button><button type="button" class="btn sm line" data-lp="clear">메모 지우기</button><button type="button" class="btn sm line" data-lp="close">수업 닫기</button></div></div>';
-      var memo = $(".lp-memo", p);
-      memo.oninput = function () { push({ memo: memo.value.slice(0, 4000) }); };
+      p.innerHTML = '<div class="lp-head"><b>수업</b><span class="lp-code">' + esc(code) + '</span><button type="button" class="lp-min" data-lp="min" title="접기">–</button></div>' +
+        '<div class="lp-body">' + (FB ? "" : '<p class="lp-help warn">서버 연결 전 · 이 컴퓨터 창끼리만</p>') +
+        '<label class="lp-ck"><input type="checkbox" data-lp="follow"' + (!doc || doc.follow !== false ? " checked" : "") + "> 학생 화면 따라오기</label>" +
+        '<label class="lp-ck"><input type="checkbox" data-lp="lock"' + (doc && doc.lock ? " checked" : "") + "> 정답 잠금</label>" +
+        '<div class="lp-btns"><button type="button" class="btn sm dark" data-lp="reveal">정답 공개</button><button type="button" class="btn sm line" data-lp="close">수업 닫기</button></div></div>';
       p.querySelector('[data-lp="follow"]').onchange = function (e) { push({ follow: e.target.checked }, true); };
       p.querySelector('[data-lp="lock"]').onchange = function (e) { if (doc) doc.lock = e.target.checked; push({ lock: e.target.checked }, true); };
       p.querySelector('[data-lp="reveal"]').onclick = function () {
@@ -152,16 +149,14 @@
         p.querySelector('[data-lp="lock"]').checked = false;
         push({ reveal: n, lock: false }, true); toast("학생 화면에 정답을 공개했습니다.");
       };
-      p.querySelector('[data-lp="clear"]').onclick = function () { memo.value = ""; push({ memo: "" }, true); };
       p.querySelector('[data-lp="close"]').onclick = function () { if (confirm("수업을 닫을까요? 학생 화면의 연결도 끝납니다.")) { closeSession(); toast("수업을 닫았습니다."); } };
     } else {
-      p.className = "live-panel s no-print" + (doc && doc.memo ? "" : " empty");
-      p.innerHTML = '<div class="lp-head"><b>수업 중</b><span class="lp-code">' + esc(code) + '</span><label class="lp-ck sm"><input type="checkbox" data-lp="sfollow"' + (follow ? " checked" : "") + '> 선생님 화면 따라가기</label><button type="button" class="lp-min" data-lp="min" title="접기">–</button><button type="button" class="lp-x" data-lp="leave" title="나가기">나가기</button></div>' +
-        '<div class="lp-body"><div class="lp-board">' + (doc && doc.memo ? esc(doc.memo).replace(/\n/g, "<br>") : '<span class="muted">선생님 메모가 여기에 나타납니다.</span>') + "</div></div>";
+      p.className = "live-panel s no-print";
+      p.innerHTML = '<div class="lp-head"><b>수업</b><span class="lp-code">' + esc(code) + '</span><label class="lp-ck sm"><input type="checkbox" data-lp="sfollow"' + (follow ? " checked" : "") + '> 따라가기</label><button type="button" class="lp-x" data-lp="leave">나가기</button></div>';
       p.querySelector('[data-lp="sfollow"]').onchange = function (e) { follow = e.target.checked; if (follow && doc) apply(doc, true); };
       p.querySelector('[data-lp="leave"]').onclick = function () { closeSession(); toast("수업에서 나왔습니다."); };
     }
-    p.querySelector('[data-lp="min"]').onclick = function () { p.classList.toggle("min"); };
+    var mn = p.querySelector('[data-lp="min"]'); if (mn) mn.onclick = function () { p.classList.toggle("min"); };
   }
 
   /* ───────── 학생 ───────── */
@@ -177,9 +172,8 @@
         closeSession(); return;
       }
       if (first) { first = false; role = "student"; code = c; ssSet({ role: role, code: code }); toast("수업에 들어왔습니다."); }
-      var memoChanged = !doc || doc.memo !== d.memo;
       doc = d; apply(d, false);
-      if (memoChanged || !$("#live-panel")) renderPanel();
+      if (!$("#live-panel")) renderPanel();
       chip();
     }, function (e) { toast("수업에 연결하지 못했습니다: " + e.message); closeSession(); });
   }
@@ -191,8 +185,9 @@
     if (wasLock && !lastLock) regradeAll();
     if (lastReveal !== null && d.reveal > lastReveal) revealAll();
     lastReveal = d.reveal || 0;
+    if (window.Ink) Ink.showTeacher(d.ink ? d.ink.s : [], d.ink ? d.ink.h : "");
     if (!follow || d.follow === false) return;
-    var go = function () { openKq(d.kq); scrollTo(d.scroll); };
+    var go = function () { openKq(d.kq); scrollTo(d.scroll); if (window.Ink && d.ink) Ink.showTeacher(d.ink.s, d.ink.h); };
     if (d.hash && d.hash !== location.hash) {
       var nav = function () { applying = true; location.hash = d.hash; setTimeout(function () { applying = false; go(); }, 450); };
       var m = /^#\/res\/([^/?]+)/.exec(d.hash);
@@ -249,7 +244,10 @@
   var app = document.getElementById("app");
   if (app && window.MutationObserver) new MutationObserver(function () { chip(); }).observe(app, { childList: true });
 
+  /* 교사 판서 → 학생 화면 */
+  if (window.Ink) Ink.onChange(function (strokes, k, final) { if (role === "teacher") push({ ink: { h: k, s: strokes } }, final); });
   window.Live = {
+    teacherInk: function (k) { return role === "student" && doc && doc.ink && doc.ink.h === k ? doc.ink.s : []; },
     locked: function () { return role === "student" && lastLock; },
     role: function () { return role; },
     code: function () { return code; },

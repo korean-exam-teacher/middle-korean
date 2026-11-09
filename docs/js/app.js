@@ -13,7 +13,8 @@
   var myAssign = [];   // 학생: 내 과제 목록 [{a, cls, sub}]
   var dataReady = false, dataErrors = [];
   /* v88 시안: 문제은행과 같은 디자인(흰 바탕·남색·상단 메뉴·영상 머리). index_v88.html 의 <html data-skin="v88"> 일 때만 */
-  var V88 = document.documentElement.getAttribute("data-skin") === "v88";
+  var SKIN = document.documentElement.getAttribute("data-skin") || "";
+  var V88 = !!SKIN, V89 = SKIN === "v89";   /* v89 시안: 조선 백자 — 더 담백하게, 설명 줄이기 */
 
   /* ───────── 유틸 ───────── */
   function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
@@ -124,19 +125,20 @@
       '<footer class="foot">국어의 모든 것 · 1단계 개념 학습 · 2022 개정 국어과 교육과정 기반 · 기출 문항 저작권: 한국교육과정평가원(비영리 학습용) · 학습 기록은 이 브라우저에만 저장됩니다</footer>';
   }
   function shell88(active, inner) {
-    var nav = [["home", "#/", "처음"], ["middle", "#/school/middle", "중학교"], ["common", "#/school/common", "고등 공통"], ["elective", "#/school/elective", "고등 선택"], ["standards", "#/standards", "성취기준"]];
-    if (T()) { nav.push(["share", "#/share", "내 활동 자료"]); nav.push(["teacher", "#/teacher", "교사 자료실"]); }
+    var nav = [["middle", "#/school/middle", "중학교"], ["common", "#/school/common", "고등 공통"], ["elective", "#/school/elective", "고등 선택"], ["standards", "#/standards", "성취기준"]];
+    if (!V89) nav.unshift(["home", "#/", "처음"]);
+    if (T()) { nav.push(["share", "#/share", V89 ? "활동" : "내 활동 자료"]); nav.push(["teacher", "#/teacher", V89 ? "자료실" : "교사 자료실"]); }
     else nav.push(["my", "#/my", "내 학습"]);
     return '<header class="gnb"><div class="inner">' +
-      '<a class="logo" href="#/" aria-label="1단계 개념 학습 처음 화면"><span class="logo-text"><span class="logo-old" lang="okm">내히 이러</span><span class="logo-sub">개념 학습</span><span class="logo-gloss">냇물을 이루어</span></span></a>' +
+      '<a class="logo" href="#/" aria-label="1단계 개념 학습 처음 화면"><span class="logo-text"><span class="logo-old" lang="okm">내히 이러</span>' + (V89 ? "" : '<span class="logo-sub">개념 학습</span><span class="logo-gloss">냇물을 이루어</span>') + "</span></a>" +
       '<nav class="gnb-nav" aria-label="주 메뉴">' + nav.map(function (n) { return '<a class="gnb-link' + (active === n[0] ? " active" : "") + '" href="' + n[1] + '">' + n[2] + "</a>"; }).join("") +
-      '<a class="gnb-link sub" href="/suneung-korean/">처음 화면</a></nav>' +
-      '<div class="gnb-tools"><span id="live-slot"></span><label class="tv-sw" title="성취기준 원문·지도 유의점·정답 보기·학습지 인쇄·수업 열기를 보여 줍니다."><input type="checkbox" data-act="tv"' + (T() ? " checked" : "") + '><span>교사용 보기</span></label></div>' +
-      "</div></header>" + inner +
+      '<a class="gnb-link sub" href="/suneung-korean/">' + (V89 ? "전체" : "처음 화면") + "</a></nav>" +
+      '<div class="gnb-tools"><span id="live-slot"></span><label class="tv-sw" title="교사용 내용 보기"><input type="checkbox" data-act="tv"' + (T() ? " checked" : "") + '><span>' + (V89 ? "교사" : "교사용 보기") + "</span></label></div>" +
+      "</div></header>" + inner + (V89 ? '<footer class="foot89"><div class="inner"><span class="okm" lang="okm">ᄉᆡ미 기픈 므른 ᄀᆞᄆᆞ래 아니 그츨ᄊᆡ 내히 이러 바ᄅᆞ래 가ᄂᆞ니</span><span>국어의 모든 것 · 기출 저작권 한국교육과정평가원</span></div></footer>' : "") + (V89 ? "" :
       '<footer class="foot88"><div class="inner"><div class="foot-top"><span class="foot-name"><span class="okm" lang="okm">내히 이러</span> · 냇물을 이루어' +
       '<span class="foot-verse" lang="okm">ᄉᆡ미 기픈 므른 ᄀᆞᄆᆞ래 아니 그츨ᄊᆡ 내히 이러 바ᄅᆞ래 가ᄂᆞ니<small>「용비어천가」 제2장</small></span></span>' +
       "<span>국어의 모든 것 · 1단계 개념 학습 · 2022 개정 국어과 교육과정</span></div>" +
-      '<p class="foot-copy">기출 문항의 저작권은 한국교육과정평가원에 있습니다(비영리 학습용). 학습 기록은 이 브라우저에만 저장됩니다.</p></div></footer>';
+      '<p class="foot-copy">기출 문항의 저작권은 한국교육과정평가원에 있습니다(비영리 학습용). 학습 기록은 이 브라우저에만 저장됩니다.</p></div></footer>');
   }
   function hero88(w) {
     return '<section class="hero88"><div class="hero-media" aria-hidden="true"><video class="hv" muted playsinline loop autoplay preload="metadata" poster="/suneung-korean/media/hero3.jpg" src="/suneung-korean/media/hero3.mp4"></video><div class="hero-shade"></div></div>' +
@@ -146,6 +148,13 @@
       '<p class="sub">성취기준 170개를 개념 → 기본 → 심화 → 발전으로 공부하고, 고등학교 주제는 평가원 기출로 확인합니다.</p>' +
       '<form class="search-form" data-search role="search"><input name="q" type="search" autocomplete="off" placeholder="개념어로 찾기 (예: 음운 변동, 비유, 논증)" aria-label="개념어 검색"><button type="submit"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>찾기</button></form>' +
       (w ? '<p class="hero-word">오늘의 낱말 <a href="' + link(w.r.std.code) + '">' + esc(w.c.term) + "</a> — " + esc(plain(w.c.desc).replace(/\*\*/g, "").slice(0, 60)) + (w.c.desc.length > 60 ? "…" : "") + "</p>" : "") +
+      "</div></section>";
+  }
+  function hero89() {
+    return '<section class="hero89"><div class="inner"><span class="jar" aria-hidden="true"></span>' +
+      "<h1>국어 개념 학습</h1>" +
+      '<form class="search-form" data-search role="search"><input name="q" type="search" autocomplete="off" placeholder="개념어 찾기" aria-label="개념어 찾기"><button type="submit">찾기</button></form>' +
+      '<form class="join89" data-live-join><input name="code" maxlength="6" placeholder="수업 코드" autocomplete="off" aria-label="수업 코드"><button>참여</button></form>' +
       "</div></section>";
   }
   function todayStr() { var d = new Date(); return (d.getMonth() + 1) + "월 " + d.getDate() + "일 " + "일월화수목금토"[d.getDay()] + "요일"; }
@@ -218,26 +227,26 @@
   function subjCard(s) {
     var p = subjPct(s);
     return '<a class="subj c-' + s.school + (s.count ? "" : " empty") + '" href="#/subject/' + s.id + '"><span class="spine"></span><span class="in">' +
-      '<span class="kind">' + esc(s.kind) + " · " + esc(s.grade) + "</span><h3>" + esc(s.name) + "</h3>" +
-      '<span class="meta">' + (s.count ? s.areas.length + "개 영역 · 학습 주제 " + s.count + "개" : "자료 준비 중") + "</span>" +
+      (V89 ? "" : '<span class="kind">' + esc(s.kind) + " · " + esc(s.grade) + "</span>") + "<h3>" + esc(s.name) + "</h3>" +
+      '<span class="meta">' + (s.count ? (V89 ? "주제 " + s.count : s.areas.length + "개 영역 · 학습 주제 " + s.count + "개") : "자료 준비 중") + "</span>" +
       (s.count && !T() ? '<div class="bar"><i style="width:' + p + '%"></i></div>' : "") + "</span></a>";
   }
   function viewHome() {
     document.title = "국어의 모든 것";
     var u = user(), w = wordOfDay();
-    var html = V88 ? hero88(w) + '<main class="wrap">' : '<main class="wrap"><section class="today board"><div class="today-top"><h1>오늘의 칠판,<br>개념부터 차근차근.</h1>' +
+    var html = V89 ? hero89() + '<main class="wrap">' : V88 ? hero88(w) + '<main class="wrap">' : '<main class="wrap"><section class="today board"><div class="today-top"><h1>오늘의 칠판,<br>개념부터 차근차근.</h1>' +
       '<div class="date">' + todayStr() + "<br>" + (T() ? "교사용 보기" : "1단계 · 개념 학습") + "</div></div>" +
       (w ? '<div class="word">오늘의 낱말 — <a href="' + link(w.r.std.code) + '"><em>' + esc(w.c.term) + '</em></a><span class="wd">' + esc(plain(w.c.desc).replace(/\*\*/g, "").slice(0, 70)) + (w.c.desc.length > 70 ? "…" : "") + "</span></div>" : "") +
       '<form data-search><input class="input" name="q" placeholder="개념어로 찾기 (예: 음운, 비유, 논증)"><button>찾기</button></form></section>';
-    html += '<div class="live-join no-print"><b>수업 참여</b><span class="muted">선생님이 알려 준 수업 코드를 넣으면 선생님 화면과 메모를 함께 봅니다.</span><form data-live-join><input class="input" name="code" maxlength="6" placeholder="수업 코드 6자리" autocomplete="off" style="text-transform:uppercase"><button class="btn dark">참여</button></form></div>';
-    html += '<div class="legend"><span><i class="dot basic"></i>기본</span><span><i class="dot adv"></i>심화</span><span><i class="dot ext"></i>발전</span><span class="muted">중학교는 사례·그림·영상으로 개념을 찾고, 고등학교는 평가원 기출로 확인합니다.</span></div>';
+    if (!V89) html += '<div class="live-join no-print"><b>수업 참여</b><span class="muted">선생님이 알려 준 수업 코드를 넣으면 선생님 화면과 메모를 함께 봅니다.</span><form data-live-join><input class="input" name="code" maxlength="6" placeholder="수업 코드 6자리" autocomplete="off" style="text-transform:uppercase"><button class="btn dark">참여</button></form></div>';
+    if (!V89) html += '<div class="legend"><span><i class="dot basic"></i>기본</span><span><i class="dot adv"></i>심화</span><span><i class="dot ext"></i>발전</span><span class="muted">중학교는 사례·그림·영상으로 개념을 찾고, 고등학교는 평가원 기출로 확인합니다.</span></div>';
     html += '<div id="home-extra"></div>';
     var recent = (progress.recent || []).map(function (c) { return K.find(c); }).filter(Boolean).slice(0, 4);
-    if (recent.length) html += '<h2 class="h2">이어서 공부하기</h2><div class="grid g4">' + recent.map(function (r) {
+    if (recent.length) html += '<h2 class="h2">' + (V89 ? "이어서" : "이어서 공부하기") + '</h2><div class="grid g4">' + recent.map(function (r) {
       return '<a class="subj c-' + r.subject.school + '" href="' + link(r.std.code) + '"><span class="spine"></span><span class="in"><span class="kind">' + esc(r.subject.name) + " · " + esc(r.area.name) + '</span><h3 style="font-size:17px">' + esc(r.std.title) + "</h3>" + pips(r.std.code) + "</span></a>";
     }).join("") + "</div>";
     K.SCHOOLS.forEach(function (sc) {
-      html += '<h2 class="h2">' + esc(sc.name) + " <small>" + esc(sc.note) + '</small></h2><div class="grid g3">' + K.SUBJECTS.filter(function (s) { return s.school === sc.id; }).map(subjCard).join("") + "</div>";
+      html += '<h2 class="h2">' + esc(sc.name) + (V89 ? "" : " <small>" + esc(sc.note) + "</small>") + '</h2><div class="grid g3">' + K.SUBJECTS.filter(function (s) { return s.school === sc.id; }).map(subjCard).join("") + "</div>";
     });
     if (dataErrors.length) html += '<p class="small muted" style="margin-top:28px">불러오지 못한 자료: ' + esc(dataErrors.join(", ")) + "</p>";
     h(shell("home", html + "</main>"));
@@ -280,7 +289,7 @@
     subs.forEach(function (s) { tot += s.count; });
     var cur = sid ? K.subject(sid) : null;
     var html = '<main class="wrap"><div class="crumbs"><a href="#/">홈</a><i>›</i>성취기준·학습 요소</div><h1 class="title">성취기준·학습 요소</h1>' +
-      '<p class="sub">2022 개정 국어과 교육과정 중학교 「국어」, 고등학교 공통국어1·2와 선택 과목 9개의 성취기준 ' + tot + '개를 모두 담았습니다. 주제를 누르면 개념 → 기본 → 심화 → 발전으로 공부합니다.' + (t ? "" : " (성취기준 원문은 '교사용 보기'를 켜면 보입니다.)") + "</p>" +
+      (V89 ? "" : '<p class="sub">2022 개정 국어과 교육과정 중학교 「국어」, 고등학교 공통국어1·2와 선택 과목 9개의 성취기준 ' + tot + '개를 모두 담았습니다. 주제를 누르면 개념 → 기본 → 심화 → 발전으로 공부합니다.' + (t ? "" : " (성취기준 원문은 '교사용 보기'를 켜면 보입니다.)") + "</p>") +
       '<div class="chips no-print"><a class="chip' + (cur ? "" : " on") + '" href="#/standards">전체</a>' + subs.map(function (s) { return '<a class="chip' + (cur === s ? " on" : "") + '" href="#/standards/' + s.id + '">' + esc(s.name) + " <small>" + s.count + "</small></a>"; }).join("") + "</div>";
     (cur ? [cur] : subs).forEach(function (s) {
       html += '<section class="std-sec"><h2 class="h2">' + esc(s.name) + " <small>" + esc(s.kind) + " · " + esc(s.grade) + " · " + s.count + "개</small></h2>";
@@ -302,19 +311,26 @@
     document.title = sc.name + " · 국어의 모든 것";
     var groups = {}, order = [];
     K.SUBJECTS.filter(function (s) { return s.school === id; }).forEach(function (s) { if (!groups[s.kind]) { groups[s.kind] = []; order.push(s.kind); } groups[s.kind].push(s); });
-    var html = '<main class="wrap"><div class="crumbs"><a href="#/">홈</a><i>›</i>' + esc(sc.name) + '</div><h1 class="title">' + esc(sc.name) + '</h1><p class="sub">' + esc(sc.note) + "</p>";
+    var html = '<main class="wrap"><div class="crumbs"><a href="#/">홈</a><i>›</i>' + esc(sc.name) + '</div><h1 class="title">' + esc(sc.name) + "</h1>" + (V89 ? "" : '<p class="sub">' + esc(sc.note) + "</p>");
     order.forEach(function (g) { html += '<h2 class="h2">' + esc(g) + '</h2><div class="grid g3">' + groups[g].map(subjCard).join("") + "</div>"; });
     h(shell(id, html + "</main>"));
   }
-  function viewSubject(id) {
+  function viewSubject(id, ac) {
     var s = K.subject(id); if (!s) return notFound();
     document.title = s.name + " · 국어의 모든 것";
     var html = '<main class="wrap narrow"><div class="crumbs"><a href="#/">홈</a><i>›</i><a href="#/school/' + s.school + '">' + esc(schoolName(s.school)) + "</a><i>›</i>" + esc(s.name) + "</div>" +
-      '<h1 class="title">' + esc(s.name) + '</h1><p class="sub">' + esc(s.kind) + " · " + esc(s.grade) + " — " + esc(s.desc) + "</p>";
+      '<h1 class="title">' + esc(s.name) + "</h1>" + (V89 ? "" : '<p class="sub">' + esc(s.kind) + " · " + esc(s.grade) + " — " + esc(s.desc) + "</p>");
     if (!s.count) html += '<div class="empty">이 과목의 학습 자료를 준비하고 있습니다.</div>';
-    s.areas.forEach(function (a) {
-      html += '<section class="area"><div class="area-head">' + (s.areas.length > 1 ? '<span class="num">' + esc(a.code) + "</span>" : "") + "<h2>" + esc(a.name) + "</h2></div>" +
-        (a.intro ? '<p class="area-intro">' + rich(a.intro) + "</p>" : "") +
+    /* 영역이 여럿이면 탭으로 하나씩 (긴 스크롤 대신) */
+    var areas = s.areas;
+    if (areas.length > 1) {
+      var cur = areas.filter(function (a) { return a.code === ac; })[0] || areas[0];
+      html += '<nav class="area-tabs">' + areas.map(function (a) { return '<a href="#/subject/' + s.id + "/" + encodeURIComponent(a.code) + '"' + (a === cur ? ' class="on"' : "") + ">" + esc(a.name) + " <small>" + a.standards.length + "</small></a>"; }).join("") + "</nav>";
+      areas = [cur];
+    }
+    areas.forEach(function (a) {
+      html += '<section class="area">' + (s.areas.length > 1 ? "" : '<div class="area-head"><h2>' + esc(a.name) + "</h2></div>") +
+        (a.intro && !V89 ? '<p class="area-intro">' + rich(a.intro) + "</p>" : "") +
         '<ul class="topics">' + a.standards.map(function (st) {
           return '<li><a class="topic" href="' + link(st.code) + '"><span><div class="t">' + esc(st.title) + '</div><div class="kw">' + esc(kw(st)) + "</div>" +
             (T() ? '<div class="std"><b>' + esc(st.code) + "</b>" + esc(st.text) + "</div>" : "") + "</span>" + (T() ? "" : pips(st.code)) + "</a></li>";
@@ -338,10 +354,10 @@
     var html = '<main class="wrap narrow"><div class="crumbs"><a href="#/">홈</a><i>›</i><a href="#/subject/' + s.id + '">' + esc(s.name) + "</a><i>›</i>" + esc(r.area.name) + "</div>";
     if (asg.length) html += '<div class="assign-banner">과제 <b>' + asg.map(function (x) { return '<a href="#/assignment/' + x.a.id + '">' + esc(x.a.title) + "</a>"; }).join(", ") + "</b>에 포함된 주제입니다. 단계 학습을 마치면 '완료'를 눌러 주세요.</div>";
     html += '<header class="lesson-head"><div class="area-tag">' + esc(s.name) + " · " + esc(r.area.name) + "</div><h1>" + esc(st.title) + "</h1>" +
-      '<div class="kw-list">' + (st.keywords || []).map(function (k) { return "<span>" + esc(k) + "</span>"; }).join("") + "</div>" + elemHtml(st);
-    if (t) html += '<div class="std-box"><span class="lb">성취기준 (교사용 보기)</span><b>' + esc(st.code) + "</b> " + esc(st.text) +
+      (V89 ? "" : '<div class="kw-list">' + (st.keywords || []).map(function (k) { return "<span>" + esc(k) + "</span>"; }).join("") + "</div>") + elemHtml(st);
+    if (t) html += '<div class="std-box"><span class="lb">성취기준</span><b>' + esc(st.code) + "</b> " + esc(st.text) +
       (st.verified === false ? '<div class="warn">※ 공식 문서와 문장 대조가 필요합니다.</div>' : "") +
-      (mid ? "" : '<div id="kq-src" class="small" style="margin-top:8px;color:var(--ink-2)">기출 연결 근거를 불러오는 중…</div>') + "</div>" +
+      (mid ? "" : '<details class="kq-src-box"><summary>기출 연결 근거</summary><div id="kq-src" class="small">불러오는 중…</div></details>') + "</div>" +
       '<div class="no-print" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:12px"><button class="btn sm dark" data-act="live-open">이 화면으로 수업 열기</button>' +
       '<a class="btn sm line" href="#/print/' + encodeURIComponent(code) + '">학습지 미리보기·인쇄</a><a class="btn sm line" href="#/res-new/' + encodeURIComponent(code) + '">활동 만들기</a><button class="btn sm line" data-act="reveal">답 모두 펼치기</button></div>';
     html += "</header>";
@@ -384,8 +400,8 @@
   function sourcesHtml(st) {
     var S = st.sources || [];
     if (!S.length) return T() ? '<div class="sources warn-src">이 주제의 개념 설명은 아직 공식 자료와 대조 중입니다.</div>' : "";
-    return '<div class="sources"><b>근거 자료</b>' + (st.checked ? ' <span class="muted small">(' + esc(st.checked) + " 대조)</span>" : "") + "<ol>" +
-      S.map(function (s) { return '<li><a href="' + esc(s.u) + '" target="_blank" rel="noopener">' + esc(s.t) + "</a>" + (s.k ? ' <span class="muted small">' + esc(s.k) + "</span>" : "") + "</li>"; }).join("") + "</ol></div>";
+    return '<details class="sources"><summary>근거 자료 <span class="muted small">' + S.length + "</span></summary><ol>" +
+      S.map(function (s) { return '<li><a href="' + esc(s.u) + '" target="_blank" rel="noopener">' + esc(s.t) + "</a>" + (s.k ? ' <span class="muted small">' + esc(s.k) + "</span>" : "") + "</li>"; }).join("") + "</ol>" + (st.checked ? '<p class="muted small">' + esc(st.checked) + " 대조</p>" : "") + "</details>";
   }
 
   /* 중학교: 사례·그림·영상 블록 */
@@ -1428,7 +1444,7 @@
     switch (p[0]) {
       case "": case "login": case "signup": case "reset": return viewHome();
       case "school": return viewSchool(p[1]);
-      case "subject": return viewSubject(p[1]);
+      case "subject": return viewSubject(p[1], p[2]);
       case "learn": case "std": return viewLearn(p[1], p[2]);
       case "search": return viewSearch(p.slice(1).join("/"));
       case "my": return viewMy();
