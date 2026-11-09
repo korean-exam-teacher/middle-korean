@@ -22,6 +22,27 @@
   var $ = function (s, r) { return (r || document).querySelector(s); };
   function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
   var KT = window.KME_TOOLS || {};
+  /* v91: 갈래 사이를 오갈 때 브라우저에 남은 옛 화면(최대 10분)이 뜨지 않도록 주소에 판 번호(?v=)를 붙인다 */
+  var VER = (function () { var s = document.currentScript && document.currentScript.src, m = s && /[?&]v=([^&]+)/.exec(s); return m ? m[1] : "91"; })();
+  var SITES = /^\/(suneung|middle|nonsul|advanced|seonsul)-korean\/([^/]*\.html)?$/;
+  function fresh(href) {
+    try {
+      var u = new URL(href, location.href);
+      if (u.origin !== location.origin || !SITES.test(u.pathname) || u.searchParams.get("v") === VER) return null;
+      u.searchParams.set("v", VER); return u.pathname + u.search + u.hash;
+    } catch (e) { return null; }
+  }
+  function bustLinks() {
+    document.querySelectorAll("a[href]").forEach(function (a) {
+      var h = a.getAttribute("href"); if (!h || h.charAt(0) === "#") return;
+      var u = new URL(h, location.href); if (u.pathname === location.pathname) return;
+      var f = fresh(h); if (f) a.setAttribute("href", f);
+    });
+  }
+  var bt = null;
+  function bustSoon() { clearTimeout(bt); bt = setTimeout(bustLinks, 120); }
+  if (document.readyState !== "loading") bustSoon(); else document.addEventListener("DOMContentLoaded", bustSoon);
+  if (window.MutationObserver) new MutationObserver(bustSoon).observe(document.documentElement, { childList: true, subtree: true });
   function toast(m) { var t = document.getElementById("toast"); if (!t) { t = document.createElement("div"); t.id = "toast"; t.className = "toast kt-toast"; document.body.appendChild(t); } t.textContent = m; t.classList.add("show"); clearTimeout(toast._t); toast._t = setTimeout(function () { t.classList.remove("show"); }, 2200); }
   function T() { return window.Auth ? Auth.teacherView() : true; }
   function path() { return location.pathname.replace(/index\.html$/, ""); }
@@ -117,7 +138,7 @@
     resPayload(h).then(function (res) { push({ url: u, hash: h, kq: "", scroll: 0, res: res, ink: { h: k, s: window.Ink ? Ink.mine(k) : [] } }); });
   }
   function openSession() {
-    if (!T()) { toast("'교사용 보기'를 켠 뒤 수업을 열 수 있습니다."); return; }
+    if (!T()) { if (window.Auth && Auth.setTeacherView) Auth.setTeacherView(true); else { toast("'교사용 보기'를 켠 뒤 수업을 열 수 있습니다."); return; } }
     if (role === "teacher") { renderPanel(); return; }
     var c = newCode(), tries = 0;
     var data = { url: here(), hash: KT.keyPath ? location.hash : (location.hash || "#/"), memo: "", lock: false, reveal: 0, kq: "", scroll: 0, res: null, follow: true, title: document.title };
@@ -197,7 +218,7 @@
     if (!follow || d.follow === false) return;
     if (d.url) {
       var tp = d.url.split("#")[0];
-      if (tp !== path()) { if (!applying) { applying = true; location.href = d.url; } return; }
+      if (tp !== path()) { if (!applying) { applying = true; location.href = fresh(d.url) || d.url; } return; }
     }
     var go = function () { openKq(d.kq); scrollTo(d.scroll); if (window.Ink && d.ink) Ink.showTeacher(d.ink.s, d.ink.h); };
     if ((d.hash || location.hash) && d.hash !== location.hash && !(!KT.keyPath && d.hash === "#/" && !location.hash)) {
