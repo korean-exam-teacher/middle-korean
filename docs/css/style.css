@@ -580,3 +580,25 @@ details.kq.hp-exam { margin-bottom: 10px; }
 .hp-tbl small { font-size: 11px; color: var(--ink-3); }
 details.kq.hp-exam > summary .st { display: none; }
 .tb-units { margin-top: 10px; line-height: 1.7; } .tb-units .lb { margin-right: 6px; }
+/* v95 학력평가 글자로 */
+.hp-set .ptext { max-height: none; overflow: visible; }
+.hp-ph { font-size: 14.5px; font-weight: 700; margin: 0 0 8px; color: var(--ink); }
+.hp-fig { margin: 4px 0 12px; border: 1px solid var(--rule-2); padding: 6px; background: #fff; }
+.hp-fig .hp-crop { margin: 0; }
+.kq-body .pfig-wrap { min-width: 0; }
+.hp-set.in-grp { margin: 0; border-top: 0; padding-top: 0; }
+.hp-grp > .kq-body { padding: 14px; }
+.hp-note { margin: 0 0 12px; }
+.hp-note .ptext { max-height: none; }
+/* v95 신구 대조 */
+.cmp-legend { display: flex; gap: 8px; flex-wrap: wrap; margin: 4px 0 8px; }
+.cg { display: inline-block; font-size: 12.5px; padding: 1px 8px; border: 1px solid var(--rule); border-radius: 2px; white-space: nowrap; }
+.cg.keep { color: var(--ink-2); }
+.cg.merge { color: #2F4F7F; border-color: #2F4F7F; }
+.cg.split { color: #7A5A2F; border-color: #7A5A2F; }
+.cg.gone { color: #8A3B3B; border-color: #8A3B3B; }
+.cg.new { color: #fff; background: #2F4F7F; border-color: #2F4F7F; }
+.cmp-tbl td { vertical-align: top; font-size: 14px; line-height: 1.6; }
+.cmp-new + .cmp-new { margin-top: 6px; padding-top: 6px; border-top: 1px dashed var(--rule-2); }
+.cmp-tbl a { color: inherit; }
+.cmp-tbl a:hover b { text-decoration: underline; }
