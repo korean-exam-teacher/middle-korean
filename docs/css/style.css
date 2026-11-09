@@ -602,3 +602,8 @@ details.kq.hp-exam > summary .st { display: none; }
 .cmp-new + .cmp-new { margin-top: 6px; padding-top: 6px; border-top: 1px dashed var(--rule-2); }
 .cmp-tbl a { color: inherit; }
 .cmp-tbl a:hover b { text-decoration: underline; }
+/* v96 성취기준 화면 단추 간격 */
+.chips { gap: 10px 8px; }
+.chips.mode-row { margin: 10px 0 22px; padding-bottom: 18px; border-bottom: 1px solid var(--rule-2, #e7e7e4); }
+.chips.mode-row + .chips { margin-bottom: 26px; }
+.chips.mode-row + .area-tabs { margin-bottom: 22px; }
