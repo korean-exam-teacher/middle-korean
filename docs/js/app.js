@@ -125,7 +125,9 @@
       '<footer class="foot">국어의 모든 것 · 1단계 개념 학습 · 2022 개정 국어과 교육과정 기반 · 기출 문항 저작권: 한국교육과정평가원(비영리 학습용) · 학습 기록은 이 브라우저에만 저장됩니다</footer>';
   }
   function shell88(active, inner) {
-    var nav = [["middle", "#/school/middle", "중학교"], ["common", "#/school/common", "고등 공통"], ["elective", "#/school/elective", "고등 선택"], ["standards", "#/standards", "성취기준"]];
+    var nav = V89 ? [["middle", "#/school/middle", "중학교"], ["high", "#/school/high", "고등학교"], ["standards", "#/standards", "성취기준"]] :
+      [["middle", "#/school/middle", "중학교"], ["common", "#/school/common", "고등 공통"], ["elective", "#/school/elective", "고등 선택"], ["standards", "#/standards", "성취기준"]];
+    if (V89 && (active === "common" || active === "elective")) active = "high";
     if (!V89) nav.unshift(["home", "#/", "처음"]);
     if (T()) { nav.push(["share", "#/share", V89 ? "활동" : "내 활동 자료"]); nav.push(["teacher", "#/teacher", V89 ? "자료실" : "교사 자료실"]); }
     else nav.push(["my", "#/my", "내 학습"]);
@@ -245,7 +247,10 @@
     if (recent.length) html += '<h2 class="h2">' + (V89 ? "이어서" : "이어서 공부하기") + '</h2><div class="grid g4">' + recent.map(function (r) {
       return '<a class="subj c-' + r.subject.school + '" href="' + link(r.std.code) + '"><span class="spine"></span><span class="in"><span class="kind">' + esc(r.subject.name) + " · " + esc(r.area.name) + '</span><h3 style="font-size:17px">' + esc(r.std.title) + "</h3>" + pips(r.std.code) + "</span></a>";
     }).join("") + "</div>";
-    K.SCHOOLS.forEach(function (sc) {
+    if (V89) {
+      html += '<h2 class="h2">중학교</h2><div class="grid g3">' + K.SUBJECTS.filter(function (s) { return s.school === "middle"; }).map(subjCard).join("") + "</div>" +
+        '<h2 class="h2">고등학교</h2><div class="grid g3">' + highCards() + "</div>";
+    } else K.SCHOOLS.forEach(function (sc) {
       html += '<h2 class="h2">' + esc(sc.name) + (V89 ? "" : " <small>" + esc(sc.note) + "</small>") + '</h2><div class="grid g3">' + K.SUBJECTS.filter(function (s) { return s.school === sc.id; }).map(subjCard).join("") + "</div>";
     });
     if (dataErrors.length) html += '<p class="small muted" style="margin-top:28px">불러오지 못한 자료: ' + esc(dataErrors.join(", ")) + "</p>";
@@ -306,19 +311,33 @@
   }
 
   /* ───────── 학교급·과목 ───────── */
+  /* 고등학교: '공통'과 '선택'을 고르는 화면 */
+  function highCards() {
+    var com = K.SUBJECTS.filter(function (s) { return s.school === "common" && s.count; }), ele = K.SUBJECTS.filter(function (s) { return s.school === "elective" && s.count; });
+    var n = function (l) { return l.reduce(function (t, s) { return t + s.count; }, 0); };
+    var card = function (href, name, meta) { return '<a class="subj c-high" href="' + href + '"><span class="spine"></span><span class="in"><h3>' + name + '</h3><span class="meta">' + meta + "</span></span></a>"; };
+    return card("#/school/common", "공통", com.map(function (s) { return esc(s.name); }).join(" · ") + " · 주제 " + n(com)) +
+      card("#/school/elective", "선택", "일반 · 진로 · 융합 " + ele.length + "과목 · 주제 " + n(ele));
+  }
+  function viewHigh() {
+    document.title = "고등학교 · 국어의 모든 것";
+    h(shell("high", '<main class="wrap"><div class="crumbs"><a href="#/">홈</a><i>›</i>고등학교</div><h1 class="title">고등학교</h1><div class="grid g3">' + highCards() + "</div></main>"));
+  }
   function viewSchool(id) {
+    if (id === "high") return viewHigh();
     var sc = K.SCHOOLS.filter(function (x) { return x.id === id; })[0]; if (!sc) return notFound();
     document.title = sc.name + " · 국어의 모든 것";
     var groups = {}, order = [];
     K.SUBJECTS.filter(function (s) { return s.school === id; }).forEach(function (s) { if (!groups[s.kind]) { groups[s.kind] = []; order.push(s.kind); } groups[s.kind].push(s); });
-    var html = '<main class="wrap"><div class="crumbs"><a href="#/">홈</a><i>›</i>' + esc(sc.name) + '</div><h1 class="title">' + esc(sc.name) + "</h1>" + (V89 ? "" : '<p class="sub">' + esc(sc.note) + "</p>");
-    order.forEach(function (g) { html += '<h2 class="h2">' + esc(g) + '</h2><div class="grid g3">' + groups[g].map(subjCard).join("") + "</div>"; });
+    var high = id !== "middle";
+    var html = '<main class="wrap"><div class="crumbs"><a href="#/">홈</a><i>›</i>' + (high ? '<a href="#/school/high">고등학교</a><i>›</i>' + (id === "common" ? "공통" : "선택") : esc(sc.name)) + '</div><h1 class="title">' + (V89 && high ? (id === "common" ? "공통" : "선택") : esc(sc.name)) + "</h1>" + (V89 ? "" : '<p class="sub">' + esc(sc.note) + "</p>");
+    order.forEach(function (g) { html += (order.length > 1 || !V89 ? '<h2 class="h2">' + esc(g) + "</h2>" : "") + '<div class="grid g3">' + groups[g].map(subjCard).join("") + "</div>"; });
     h(shell(id, html + "</main>"));
   }
   function viewSubject(id, ac) {
     var s = K.subject(id); if (!s) return notFound();
     document.title = s.name + " · 국어의 모든 것";
-    var html = '<main class="wrap narrow"><div class="crumbs"><a href="#/">홈</a><i>›</i><a href="#/school/' + s.school + '">' + esc(schoolName(s.school)) + "</a><i>›</i>" + esc(s.name) + "</div>" +
+    var html = '<main class="wrap narrow"><div class="crumbs"><a href="#/">홈</a><i>›</i>' + (s.school === "middle" ? "" : '<a href="#/school/high">고등학교</a><i>›</i>') + '<a href="#/school/' + s.school + '">' + (s.school === "middle" ? esc(schoolName(s.school)) : s.school === "common" ? "공통" : "선택") + "</a><i>›</i>" + esc(s.name) + "</div>" +
       '<h1 class="title">' + esc(s.name) + "</h1>" + (V89 ? "" : '<p class="sub">' + esc(s.kind) + " · " + esc(s.grade) + " — " + esc(s.desc) + "</p>");
     if (!s.count) html += '<div class="empty">이 과목의 학습 자료를 준비하고 있습니다.</div>';
     /* 영역이 여럿이면 탭으로 하나씩 (긴 스크롤 대신) */
