@@ -12,6 +12,8 @@
   var progress = { done: {}, recent: [], solved: {} };
   var myAssign = [];   // 학생: 내 과제 목록 [{a, cls, sub}]
   var dataReady = false, dataErrors = [];
+  /* v88 시안: 문제은행과 같은 디자인(흰 바탕·남색·상단 메뉴·영상 머리). index_v88.html 의 <html data-skin="v88"> 일 때만 */
+  var V88 = document.documentElement.getAttribute("data-skin") === "v88";
 
   /* ───────── 유틸 ───────── */
   function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
@@ -109,6 +111,7 @@
   /* ───────── 틀 ───────── */
   function shell(active, inner) {
     var u = user();
+    if (V88) return shell88(active, inner);
     var nav = [["home", "#/", "홈"], ["middle", "#/school/middle", "중학교"], ["common", "#/school/common", "고등 공통"], ["elective", "#/school/elective", "고등 선택"], ["standards", "#/standards", "성취기준"]];
     if (T()) { nav.push(["share", "#/share", "내 활동 자료"]); nav.push(["teacher", "#/teacher", "교사 자료실"]); }
     else nav.push(["my", "#/my", "내 학습"]);
@@ -119,6 +122,31 @@
       '<a class="hub" href="/suneung-korean/" title="국어의 모든 것 첫 화면(1~5단계)">첫 화면</a></div>' +
       "</div></div></header>" + inner +
       '<footer class="foot">국어의 모든 것 · 1단계 개념 학습 · 2022 개정 국어과 교육과정 기반 · 기출 문항 저작권: 한국교육과정평가원(비영리 학습용) · 학습 기록은 이 브라우저에만 저장됩니다</footer>';
+  }
+  function shell88(active, inner) {
+    var nav = [["home", "#/", "처음"], ["middle", "#/school/middle", "중학교"], ["common", "#/school/common", "고등 공통"], ["elective", "#/school/elective", "고등 선택"], ["standards", "#/standards", "성취기준"]];
+    if (T()) { nav.push(["share", "#/share", "내 활동 자료"]); nav.push(["teacher", "#/teacher", "교사 자료실"]); }
+    else nav.push(["my", "#/my", "내 학습"]);
+    return '<header class="gnb"><div class="inner">' +
+      '<a class="logo" href="#/" aria-label="1단계 개념 학습 처음 화면"><span class="logo-text"><span class="logo-old" lang="okm">내히 이러</span><span class="logo-sub">개념 학습</span><span class="logo-gloss">냇물을 이루어</span></span></a>' +
+      '<nav class="gnb-nav" aria-label="주 메뉴">' + nav.map(function (n) { return '<a class="gnb-link' + (active === n[0] ? " active" : "") + '" href="' + n[1] + '">' + n[2] + "</a>"; }).join("") +
+      '<a class="gnb-link sub" href="/suneung-korean/">처음 화면</a></nav>' +
+      '<div class="gnb-tools"><span id="live-slot"></span><label class="tv-sw" title="성취기준 원문·지도 유의점·정답 보기·학습지 인쇄·수업 열기를 보여 줍니다."><input type="checkbox" data-act="tv"' + (T() ? " checked" : "") + '><span>교사용 보기</span></label></div>' +
+      "</div></header>" + inner +
+      '<footer class="foot88"><div class="inner"><div class="foot-top"><span class="foot-name"><span class="okm" lang="okm">내히 이러</span> · 냇물을 이루어' +
+      '<span class="foot-verse" lang="okm">ᄉᆡ미 기픈 므른 ᄀᆞᄆᆞ래 아니 그츨ᄊᆡ 내히 이러 바ᄅᆞ래 가ᄂᆞ니<small>「용비어천가」 제2장</small></span></span>' +
+      "<span>국어의 모든 것 · 1단계 개념 학습 · 2022 개정 국어과 교육과정</span></div>" +
+      '<p class="foot-copy">기출 문항의 저작권은 한국교육과정평가원에 있습니다(비영리 학습용). 학습 기록은 이 브라우저에만 저장됩니다.</p></div></footer>';
+  }
+  function hero88(w) {
+    return '<section class="hero88"><div class="hero-media" aria-hidden="true"><video class="hv" muted playsinline loop autoplay preload="metadata" poster="/suneung-korean/media/hero3.jpg" src="/suneung-korean/media/hero3.mp4"></video><div class="hero-shade"></div></div>' +
+      '<div class="inner hero-inner"><p class="hero-eyebrow">2022 개정 교육과정<i></i>중학교 · 고등학교 국어</p>' +
+      '<p class="hero-copy">냇물을 이루어<br>바다에 이른다.</p>' +
+      "<h1>국어 개념 학습</h1>" +
+      '<p class="sub">성취기준 170개를 개념 → 기본 → 심화 → 발전으로 공부하고, 고등학교 주제는 평가원 기출로 확인합니다.</p>' +
+      '<form class="search-form" data-search role="search"><input name="q" type="search" autocomplete="off" placeholder="개념어로 찾기 (예: 음운 변동, 비유, 논증)" aria-label="개념어 검색"><button type="submit"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>찾기</button></form>' +
+      (w ? '<p class="hero-word">오늘의 낱말 <a href="' + link(w.r.std.code) + '">' + esc(w.c.term) + "</a> — " + esc(plain(w.c.desc).replace(/\*\*/g, "").slice(0, 60)) + (w.c.desc.length > 60 ? "…" : "") + "</p>" : "") +
+      "</div></section>";
   }
   function todayStr() { var d = new Date(); return (d.getMonth() + 1) + "월 " + d.getDate() + "일 " + "일월화수목금토"[d.getDay()] + "요일"; }
 
@@ -197,7 +225,7 @@
   function viewHome() {
     document.title = "국어의 모든 것";
     var u = user(), w = wordOfDay();
-    var html = '<main class="wrap"><section class="today board"><div class="today-top"><h1>오늘의 칠판,<br>개념부터 차근차근.</h1>' +
+    var html = V88 ? hero88(w) + '<main class="wrap">' : '<main class="wrap"><section class="today board"><div class="today-top"><h1>오늘의 칠판,<br>개념부터 차근차근.</h1>' +
       '<div class="date">' + todayStr() + "<br>" + (T() ? "교사용 보기" : "1단계 · 개념 학습") + "</div></div>" +
       (w ? '<div class="word">오늘의 낱말 — <a href="' + link(w.r.std.code) + '"><em>' + esc(w.c.term) + '</em></a><span class="wd">' + esc(plain(w.c.desc).replace(/\*\*/g, "").slice(0, 70)) + (w.c.desc.length > 70 ? "…" : "") + "</span></div>" : "") +
       '<form data-search><input class="input" name="q" placeholder="개념어로 찾기 (예: 음운, 비유, 논증)"><button>찾기</button></form></section>';
