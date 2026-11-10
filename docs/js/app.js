@@ -248,7 +248,7 @@
       return '<a class="subj c-' + r.subject.school + '" href="' + link(r.std.code) + '"><span class="spine"></span><span class="in"><span class="kind">' + esc(r.subject.name) + " · " + esc(r.area.name) + '</span><h3 style="font-size:17px">' + esc(r.std.title) + "</h3>" + pips(r.std.code) + "</span></a>";
     }).join("") + "</div>";
     if (V89) {
-      html += '<h2 class="h2">중학교</h2><div class="grid g3">' + middleCards() + "</div>" +
+      html += '<h2 class="h2">중학교</h2><div class="grid g3">' + middleCards() + "</div>" + basicBanner() +
         '<h2 class="h2">고등학교</h2><div class="grid g3">' + highCards() + "</div>";
     } else K.SCHOOLS.forEach(function (sc) {
       html += '<h2 class="h2">' + esc(sc.name) + (V89 ? "" : " <small>" + esc(sc.note) + "</small>") + '</h2><div class="grid g3">' + K.SUBJECTS.filter(function (s) { return s.school === sc.id; }).map(subjCard).join("") + "</div>";
@@ -648,7 +648,7 @@
     else if (it.bogi) { var m = /^<\s*([^<>]{1,12}?)\s*>\s*/.exec(plain(it.bogi)); right += '<div class="bogi">' + (m ? '<span class="bl">&lt; ' + esc(m[1]) + " &gt;</span>" + bankBr(it.bogi.slice(it.bogi.indexOf(">") + 1).replace(/^\s+/, ""), it.bogiBrackets) : bankBr(it.bogi, it.bogiBrackets)) + "</div>"; }
     if (it.fig && it.fig.m === "ch") right += figImgs(it.fig.f, "선택지");
     right += '<ul class="choices">';
-    for (var n = 1; n <= 5; n++) right += '<li><button type="button" data-n="' + n + '"><span class="cn">' + CIRC[n] + "</span><span>" + bank(it.choices[n - 1] != null ? it.choices[n - 1] : "") + "</span></button></li>";
+    for (var n = 1; n <= (it.basic ? it.choices.length : 5); n++) right += '<li><button type="button" data-n="' + n + '"><span class="cn">' + CIRC[n] + "</span><span>" + bank(it.choices[n - 1] != null ? it.choices[n - 1] : "") + "</span></button></li>";
     right += '</ul><div class="verdict hidden"></div><div class="kq-tools"><button class="btn sm line" data-exp>해설 보기</button>' + '<button class="btn sm line tv-only" data-showans>정답 보기</button>' + '</div><div class="explain hidden"></div>';
     return { two: !!left, html: left ? left + "<div>" + right + "</div>" : right };
   }
@@ -714,7 +714,7 @@
   function openKq(d) {
     if (d.classList.contains("hp-grp")) return openGrp(d);
     var b = d.querySelector(".kq-body"); if (b.innerHTML) return;
-    var it = isHpKey(d.dataset.key) ? HP.item(d.dataset.key) : Kichul.item(d.dataset.key);
+    var it = isBasicKey(d.dataset.key) ? basicItem(d.dataset.key) : isHpKey(d.dataset.key) ? HP.item(d.dataset.key) : Kichul.item(d.dataset.key);
     if (it.hp && d.classList.contains("hp-exam")) { it.passage = null; it.note = null; }   /* 시험지 보기에서는 지문을 위에 한 번만 */
     var r = kqBody(it);
     b.className = "kq-body" + (r.two ? " two" : ""); b.innerHTML = r.html;
@@ -755,6 +755,7 @@
       var ex = b.querySelector(".explain");
       if (!ex.classList.contains("hidden")) { ex.classList.add("hidden"); return; }
       ex.classList.remove("hidden"); ex.textContent = "해설을 불러오는 중…";
+      if (it.basic) { ex.innerHTML = "<b>정답 " + CIRC[it.answer] + "</b> " + rich(it.explain || "") + '<div class="muted small" style="margin-top:6px">「국어의 모든 것」 기초학력 문항(새로 만듦)</div>'; return; }
       (it.hp ? HP.loadExplain() : Kichul.loadExplain()).then(function (E) { ex.innerHTML = E[it.key] ? (it.hp ? rich(E[it.key]) : bank(E[it.key])) + '<div class="muted small" style="margin-top:6px">해설 출처: ' + (it.hp ? "전국연합학력평가 「정답 및 해설」(시·도 교육청, EBSi 제공)" : "문제은행 수록 「정답 및 해설」 원자료") + "</div>" : "이 문항은 해설이 아직 없습니다. 정답: " + CIRC[it.answer]; });
     };
   }
@@ -805,6 +806,88 @@
       $app.querySelectorAll(".kq").forEach(function (d) { d.open = true; openKq(d); if (d._sel) return; var v = d.querySelector(".verdict"); if (v && /(^| )(o|x)( |$)/.test(v.className)) return; var s = d.querySelector("[data-showans]"); if (s) s.click(); });
     }
   };
+
+  /* ───────── 기초학력 증진 (#/basic, #/basic/<영역>/<단계>) — data/basic.js ───────── */
+  var basicP = null;
+  function loadBasic() {
+    if (!basicP) basicP = new Promise(function (res, rej) { if (window.BASIC) return res(); var x = document.createElement("script"); x.src = "data/basic.js?v=97"; x.onload = res; x.onerror = function () { rej(new Error("기초학력 자료를 불러오지 못했습니다.")); }; document.body.appendChild(x); });
+    return basicP;
+  }
+  function isBasicKey(k) { return /^basic:/.test(k || ""); }
+  function basicArea(id) { return (window.BASIC.areas || []).filter(function (a) { return a.id === id; })[0]; }
+  function basicItem(key) {
+    var B = window.BASIC, x = B.items[key]; if (!x) return null;
+    var p = key.split(":"), a = basicArea(p[1]), lv = Number(p[2]), n = Number(p[3]);
+    var bogi = x.bogi ? (/<보기>/.test(x.st) ? "<보기> " + x.bogi : x.bogi) : "";
+    return { key: key, basic: true, exam: a.name + " " + lv + "단계", no: n, stem: x.st, bogi: bogi, choices: x.ch, answer: x.a, explain: x.ex, pid: x.p, passage: null };
+  }
+  function basicSummary(it) {
+    var s = progress.solved[it.key];
+    return '<details class="kq hp-exam" open data-key="' + esc(it.key) + '"><summary><span class="src">' + esc(it.exam) + " " + it.no + "번</span>" +
+      '<span class="st">' + esc(plain(it.stem)) + '</span><span class="res' + (s ? (s.ok ? " o" : " x") : "") + '">' + (s ? (s.ok ? "맞힘" : "틀림") : "") + "</span></summary><div class=\"kq-body\"></div></details>";
+  }
+  function basicCard(a) {
+    var n = 0, ok = 0; ["1", "2", "3"].forEach(function (l) { (a.sets[l] || []).forEach(function (k) { n++; if (progress.solved[k] && progress.solved[k].ok) ok++; }); });
+    return '<a class="subj c-basic" href="#/basic/' + a.id + '/1"><span class="spine"></span><span class="in"><h3>' + esc(a.name) + '</h3><span class="meta">' + esc(a.desc) + "</span>" +
+      (!T() ? '<div class="bar"><i style="width:' + Math.round(ok / Math.max(1, n) * 100) + '%"></i></div>' : "") + "</span></a>";
+  }
+  function basicBanner() {
+    return '<a class="basic-banner" href="#/basic"><span class="bb-t">기초학력 증진</span><span class="bb-d">어휘 · 맞춤법 · 문장과 문법 · 사실적 읽기 · 추론적 읽기 · 문학 — 1단계부터 차근차근</span><span class="bb-go">들어가기 →</span></a>';
+  }
+  function viewBasic(aid, lv) {
+    document.title = "기초학력 증진 · 국어의 모든 것";
+    h(shell("basic", '<main class="wrap"><div class="loading">불러오는 중…</div></main>'));
+    loadBasic().then(function () {
+      var B = window.BASIC, a = aid ? basicArea(aid) : null;
+      var crumbs = '<div class="crumbs"><a href="#/">홈</a><i>›</i>' + (a ? '<a href="#/basic">기초학력 증진</a><i>›</i>' + esc(a.name) : "기초학력 증진") + "</div>";
+      if (!a) {
+        var html = '<main class="wrap">' + crumbs + '<h1 class="title">기초학력 증진</h1>' +
+          '<p class="sub">국어의 기초가 부족한 학생을 위한 문제입니다. 영역마다 세 단계로, 쉬운 것부터 차근차근 올라갑니다.</p>' +
+          '<div class="basic-lv">' + B.levels.map(function (l) { return '<div><b>' + esc(l.name) + " · " + esc(l.title) + "</b><span>" + esc(l.desc) + "</span></div>"; }).join("") + "</div>" +
+          '<div class="grid g3">' + B.areas.map(basicCard).join("") + "</div></main>";
+        return h(shell("basic", html));
+      }
+      lv = Number(lv) || 1; if (lv < 1 || lv > 3) lv = 1;
+      var L = B.levels[lv - 1], keys = a.sets[String(lv)] || [];
+      var head = '<main class="wrap">' + crumbs + '<h1 class="title">' + esc(a.name) + '</h1><p class="sub">' + esc(a.desc) + "</p>" +
+        '<nav class="area-tabs">' + B.levels.map(function (l) { return '<a href="#/basic/' + a.id + "/" + l.lv + '"' + (l.lv === lv ? ' class="on"' : "") + ">" + esc(l.name) + " <small>" + esc(l.title) + "</small></a>"; }).join("") + "</nav>" +
+        '<p class="muted small">' + esc(L.desc) + "</p>";
+      if (lv < 3) {
+        var segs = [], cur = null;
+        keys.forEach(function (k) {
+          var it = basicItem(k);
+          if (it.pid) { if (cur && cur.pid === it.pid) cur.items.push(it); else { cur = { pid: it.pid, items: [it] }; segs.push(cur); } }
+          else { cur = null; segs.push({ pid: null, items: [it] }); }
+        });
+        var html2 = head;
+        segs.forEach(function (sg) {
+          var q = sg.items.map(basicSummary).join("");
+          if (sg.pid) { var p = B.passages[sg.pid]; html2 += '<section class="hp-set"><div class="hp-p"><div class="hp-ph">' + esc(p.title) + '</div><div class="ptext' + (p.poem ? " poem" : "") + '">' + bank(p.text) + '</div></div><div class="hp-items">' + q + "</div></section>"; }
+          else html2 += '<section class="hp-solo">' + q + "</section>";
+        });
+        h(shell("basic", html2 + basicNav(a, lv) + "</main>"));
+        $app.querySelectorAll(".kq").forEach(function (d) { openKq(d); });
+        return;
+      }
+      /* 3단계: 학력평가 문항(같은 지문은 한 묶음) */
+      HP.load().then(function () { return HP.loadFor(keys); }).then(function () {
+        var segs = [], byP = {};
+        keys.forEach(function (k) { var it = HP.item(k), pk = it.passage ? it.passage.key : null; if (pk && byP[pk]) { byP[pk].items.push(it); return; } var g = { p: it.passage, items: [it] }; segs.push(g); if (pk) byP[pk] = g; });
+        var html3 = head;
+        segs.forEach(function (sg) {
+          html3 += sg.p ? '<section class="hp-set"><div class="hp-p pfig-wrap"><div class="hp-ph">' + (sg.p.isNote ? "※ " : "[" + esc(sg.p.range) + "] ") + esc(sg.p.head) + "</div>" + hpPassageHtml(sg.p, sg.p.range + "번 지문") + '</div><div class="hp-items">' + hpItemsHtml(sg.items) + "</div></section>" :
+            '<section class="hp-solo">' + hpItemsHtml(sg.items) + "</section>";
+        });
+        h(shell("basic", html3 + basicNav(a, lv) + "</main>"));
+        bindPfig($app);
+        $app.querySelectorAll(".kq").forEach(function (d) { openKq(d); });
+      }).catch(function (e) { toast(e.message); });
+    }).catch(function (e) { toast(e.message); });
+  }
+  function basicNav(a, lv) {
+    var B = window.BASIC, i = B.areas.indexOf(a), nx = lv < 3 ? "#/basic/" + a.id + "/" + (lv + 1) : (B.areas[i + 1] ? "#/basic/" + B.areas[i + 1].id + "/1" : "#/basic");
+    return '<div class="basic-next"><a class="btn line" href="#/basic">영역 목록</a><a class="btn dark" href="' + nx + '">' + (lv < 3 ? (lv + 1) + "단계로 →" : (B.areas[i + 1] ? esc(B.areas[i + 1].name) + " 1단계로 →" : "처음으로")) + "</a></div>";
+  }
 
   /* ───────── 학력평가: 회차 목록 · 시험지 ───────── */
   function viewHpList(g) {
@@ -1721,6 +1804,7 @@
       case "standards": return viewStandards(p[1]);
       case "compare": return viewCompare(p[1]);
       case "hp": return p[2] ? viewHpExam(p[2]) : viewHpList(Number(p[1]) || 1);
+      case "basic": return viewBasic(p[1], p[2]);
       case "account": return viewHome();
       default: return notFound();
     }
