@@ -132,20 +132,20 @@
     if (T()) { nav.push(["share", "#/share", V89 ? "활동" : "내 활동 자료"]); nav.push(["teacher", "#/teacher", V89 ? "자료실" : "교사 자료실"]); }
     else nav.push(["my", "#/my", "내 학습"]);
     return '<header class="gnb"><div class="inner">' +
-      '<a class="logo" href="#/" aria-label="1단계 개념 학습 처음 화면"><span class="logo-text"><span class="logo-old" lang="okm">내히 이러</span>' + (V89 ? "" : '<span class="logo-sub">개념 학습</span><span class="logo-gloss">냇물을 이루어</span>') + "</span></a>" +
+      '<a class="logo" href="#/" aria-label="1단계 개념 학습 처음 화면"><span class="logo-text"><span class="logo-old" lang="okm">불휘 기픈 남ᄀᆞᆫ</span>' + (V89 ? "" : '<span class="logo-sub">개념 학습</span><span class="logo-gloss">뿌리 깊은 나무는</span>') + "</span></a>" +
       '<nav class="gnb-nav" aria-label="주 메뉴">' + nav.map(function (n) { return '<a class="gnb-link' + (active === n[0] ? " active" : "") + '" href="' + n[1] + '">' + n[2] + "</a>"; }).join("") +
       '<a class="gnb-link sub" href="/suneung-korean/">' + (V89 ? "전체" : "처음 화면") + "</a></nav>" +
       '<div class="gnb-tools"><span id="live-slot"></span><label class="tv-sw" title="교사용 내용 보기"><input type="checkbox" data-act="tv"' + (T() ? " checked" : "") + '><span>' + (V89 ? "교사" : "교사용 보기") + "</span></label></div>" +
-      "</div></header>" + inner + (V89 ? '<footer class="foot89"><div class="inner"><span class="okm" lang="okm">ᄉᆡ미 기픈 므른 ᄀᆞᄆᆞ래 아니 그츨ᄊᆡ 내히 이러 바ᄅᆞ래 가ᄂᆞ니</span><span>국어의 모든 것 · 기출 저작권 한국교육과정평가원</span></div></footer>' : "") + (V89 ? "" :
-      '<footer class="foot88"><div class="inner"><div class="foot-top"><span class="foot-name"><span class="okm" lang="okm">내히 이러</span> · 냇물을 이루어' +
-      '<span class="foot-verse" lang="okm">ᄉᆡ미 기픈 므른 ᄀᆞᄆᆞ래 아니 그츨ᄊᆡ 내히 이러 바ᄅᆞ래 가ᄂᆞ니<small>「용비어천가」 제2장</small></span></span>' +
+      "</div></header>" + inner + (V89 ? '<footer class="foot89"><div class="inner"><span class="okm" lang="okm">불휘 기픈 남ᄀᆞᆫ ᄇᆞᄅᆞ매 아니 뮐ᄊᆡ 곶 됴코 여름 하ᄂᆞ니</span><span>국어의 모든 것 · 기출 저작권 한국교육과정평가원</span></div></footer>' : "") + (V89 ? "" :
+      '<footer class="foot88"><div class="inner"><div class="foot-top"><span class="foot-name"><span class="okm" lang="okm">불휘 기픈 남ᄀᆞᆫ</span> · 뿌리 깊은 나무는' +
+      '<span class="foot-verse" lang="okm">불휘 기픈 남ᄀᆞᆫ ᄇᆞᄅᆞ매 아니 뮐ᄊᆡ 곶 됴코 여름 하ᄂᆞ니<small>「용비어천가」 제2장</small></span></span>' +
       "<span>국어의 모든 것 · 1단계 개념 학습 · 2022 개정 국어과 교육과정</span></div>" +
       '<p class="foot-copy">기출 문항의 저작권은 한국교육과정평가원에 있습니다(비영리 학습용). 학습 기록은 이 브라우저에만 저장됩니다.</p></div></footer>');
   }
   function hero88(w) {
     return '<section class="hero88"><div class="hero-media" aria-hidden="true"><video class="hv" muted playsinline loop autoplay preload="metadata" poster="/suneung-korean/media/hero3.jpg" src="/suneung-korean/media/hero3.mp4"></video><div class="hero-shade"></div></div>' +
       '<div class="inner hero-inner"><p class="hero-eyebrow">2022 개정 교육과정<i></i>중학교 · 고등학교 국어</p>' +
-      '<p class="hero-copy">냇물을 이루어<br>바다에 이른다.</p>' +
+      '<p class="hero-copy">뿌리 깊은 나무는<br>바람에 흔들리지 않는다.</p>' +
       "<h1>국어 개념 학습</h1>" +
       '<p class="sub">성취기준 170개를 개념 → 기본 → 심화 → 발전으로 공부하고, 고등학교 주제는 평가원 기출로 확인합니다.</p>' +
       '<form class="search-form" data-search role="search"><input name="q" type="search" autocomplete="off" placeholder="개념어로 찾기 (예: 음운 변동, 비유, 논증)" aria-label="개념어 검색"><button type="submit"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>찾기</button></form>' +
