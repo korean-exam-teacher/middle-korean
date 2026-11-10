@@ -6,6 +6,11 @@
  * 좌표는 본문(<main>) 너비를 1000으로 둔 값이라 화면 크기가 달라도 같은 자리에 놓인다.
  * v91: 다른 갈래(수능·논술·곶·서논술·첫 화면)에서도 쓴다 — window.KME_TOOLS = { root: "body", keyPath: true }
  *   root: 판서를 얹을 곳(없으면 학습소 본문 "#app main"), keyPath: 화면 키에 주소 경로까지 넣기
+ * v102: 펜이 안 써지던 문제·지연을 없앰
+ *   - 지금 긋는 획은 화면 크기 캔버스(desynchronized)에 바로 그리고, 손을 떼면 그 획 하나만 SVG에 붙인다(전체 다시 그리기 없음).
+ *   - getCoalescedEvents(사이 점까지)·getPredictedEvents(앞질러 그리기)로 펜 끝을 바짝 따라간다.
+ *   - 펜·손가락·마우스 모두 쓴다. 펜이 닿아 있거나 막 뗀 때(0.6초)만 손바닥(터치)을 무시하고, 펜을 쓰는 기기에서는 손가락으로 끌면 화면이 내려간다.
+ *   - iPad: 길게 누름·확대경·글자 고르기를 막는다(touchstart 막기, user-select 끔).
  */
 (function () {
   var COLORS = [["#2B2A28", "먹"], ["#2F5D9E", "청화"], ["#B5483B", "진사"], ["hl", "형광"]];
@@ -20,6 +25,34 @@
   function lsSet(k, v) { try { if (v.length) localStorage.setItem(LSK + k, JSON.stringify(v)); else localStorage.removeItem(LSK + k); } catch (e) {} }
   var NS = "http://www.w3.org/2000/svg";
 
+  var live = null, lctx = null, LDPR = 1;
+  function fitLive() {
+    if (!live) return;
+    LDPR = window.devicePixelRatio || 1;
+    var w = document.documentElement.clientWidth, h = window.innerHeight;
+    live.style.width = w + "px"; live.style.height = h + "px";
+    live.width = Math.round(w * LDPR); live.height = Math.round(h * LDPR);
+    lctx.setTransform(LDPR, 0, 0, LDPR, 0, 0); lctx.lineCap = "round"; lctx.lineJoin = "round";
+  }
+  function ensureLive() {
+    if (live) return;
+    live = document.createElement("canvas"); live.className = "ink-live no-print"; live.setAttribute("aria-hidden", "true");
+    document.body.appendChild(live);
+    try { lctx = live.getContext("2d", { desynchronized: true }); } catch (e) { lctx = null; }
+    if (!lctx) lctx = live.getContext("2d");
+    fitLive();
+  }
+  (function css() {
+    var st = document.createElement("style");
+    st.textContent = ".ink-live{position:fixed;left:0;top:0;z-index:26;pointer-events:none}" +
+      "body.ink-on{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}" +
+      "body.ink-on .ink-layer{pointer-events:auto;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}" +
+      ".ink-bar .ink-pen{width:auto!important;min-width:36px;padding:0 14px 0 11px!important;border-radius:999px!important;display:inline-flex;align-items:center;gap:5px;font-size:14px!important;height:36px}" +
+      ".ink-bar .ink-pen i{font-style:normal;font-size:17px;line-height:1}" +
+      "@media print{.ink-live{display:none!important}}";
+    document.head.appendChild(st);
+  })();
+
   function ensure() {
     var m = rootEl();
     if (!m) { if (svg) svg.style.display = "none"; return false; }
@@ -28,6 +61,9 @@
       gT = document.createElementNS(NS, "g"); gM = document.createElementNS(NS, "g");
       svg.appendChild(gT); svg.appendChild(gM); document.body.appendChild(svg);
       svg.addEventListener("pointerdown", down);
+      /* iPad: 펜·손가락이 닿자마자 확대경·글자 고르기·길게 누름 메뉴가 뜨지 않게 */
+      ["touchstart", "touchmove"].forEach(function (t) { svg.addEventListener(t, function (e) { if (on) e.preventDefault(); }, { passive: false }); });
+      svg.addEventListener("contextmenu", function (e) { if (on) e.preventDefault(); });
     }
     main = m; svg.style.display = "";
     var r = main.getBoundingClientRect(), w = r.width || 1, hgt = Math.max(main.scrollHeight, r.height);
@@ -57,7 +93,7 @@
     return path;
   }
   function draw(g, list) { while (g.firstChild) g.removeChild(g.firstChild); list.forEach(function (s) { g.appendChild(el(s)); }); }
-  function redraw() { if (!ensure()) return; draw(gT, teacher); draw(gM, cur ? mine.concat([cur]) : mine); }
+  function redraw() { if (!ensure()) return; draw(gT, teacher); draw(gM, mine); }   /* 긋는 중인 획은 캔버스(ink-live)에 있다 */
   function emit(final) { listeners.forEach(function (f) { try { f(cur ? mine.concat([cur]) : mine, key, final); } catch (e) { console.error(e); } }); }
 
   var sendT = 0, tool = "pen", hist = [];
@@ -104,25 +140,97 @@
     if (changed) mine = out;
     return changed;
   }
+  var penAt = 0, penSeen = false, activeId = null;
+  function W() { return main === document.body ? document.documentElement.clientWidth : main.getBoundingClientRect().width; }
+  /* 지금 긋는 획: 화면 좌표(cl)로 캔버스에 그린다. 예측 점(pr)은 꼬리로만 붙이고 저장하지 않는다 */
+  function paintLive(cl, pr, c) {
+    if (!lctx) return;
+    lctx.clearRect(0, 0, live.width / LDPR, live.height / LDPR);
+    var p = pr && pr.length ? cl.concat(pr) : cl, hl = c === "hl", k = W() / 1000;
+    lctx.strokeStyle = hl ? "rgba(242,214,92,.45)" : c; lctx.lineWidth = (hl ? 16 : 3.2) * k;
+    lctx.beginPath(); lctx.moveTo(p[0], p[1]);
+    if (p.length < 4) lctx.lineTo(p[0] + 0.1, p[1]);
+    else {
+      for (var i = 2; i < p.length - 2; i += 2) lctx.quadraticCurveTo(p[i], p[i + 1], (p[i] + p[i + 2]) / 2, (p[i + 1] + p[i + 3]) / 2);
+      lctx.lineTo(p[p.length - 2], p[p.length - 1]);
+    }
+    lctx.stroke();
+  }
+  /* 펜·손가락으로 '톡' 누르면(거의 안 움직이고 짧게) 아래 단추·링크를 눌러 준다 — 필기를 켠 채로 답을 고를 수 있게 */
+  function tapThrough(x, y) {
+    svg.style.pointerEvents = "none"; if (live) live.style.display = "none";
+    var t = document.elementFromPoint(x, y);
+    svg.style.pointerEvents = ""; if (live) live.style.display = "";
+    var c = t && t.closest && t.closest("button,a[href],label,input,select,textarea,summary,[role=button],[data-id]");
+    if (!c || (bar && bar.contains(c))) return false;
+    if (/^(INPUT|SELECT|TEXTAREA)$/.test(c.tagName) && c.type !== "checkbox" && c.type !== "radio") { c.focus(); return true; }
+    c.click(); return true;
+  }
+  function clearLive() { if (lctx) lctx.clearRect(0, 0, live.width / LDPR, live.height / LDPR); }
   function down(e) {
     if (!on) return;
-    e.preventDefault(); svg.setPointerCapture(e.pointerId);
+    e.preventDefault();
+    var isPen = e.pointerType === "pen";
+    if (isPen) { penSeen = true; penAt = Date.now(); }
+    if (activeId !== null && activeId !== e.pointerId) return;                 /* 두 번째 손가락·손바닥 */
+    if (e.pointerType === "touch" && (Date.now() - penAt < 600)) return;     /* 펜을 막 쓰는 중 닿은 손바닥 */
+    /* 펜을 쓰는 기기에서 손가락으로 끌면: 쓰지 않고 화면을 내린다 */
+    if (e.pointerType === "touch" && penSeen && tool === "pen") {
+      var sy = e.clientY, sx = e.clientX, id0 = e.pointerId;
+      try { svg.setPointerCapture(id0); } catch (x) {}
+      var ox = sx, oy = sy, t0 = Date.now();
+      var sm = function (ev) { if (ev.pointerId !== id0) return; window.scrollBy(sx - ev.clientX, sy - ev.clientY); sx = ev.clientX; sy = ev.clientY; };
+      var su = function (ev) { if (ev.pointerId !== id0) return; svg.removeEventListener("pointermove", sm); svg.removeEventListener("pointerup", su); svg.removeEventListener("pointercancel", su);
+        if (ev.type === "pointerup" && Date.now() - t0 < 350 && Math.abs(ev.clientX - ox) + Math.abs(ev.clientY - oy) < 10) tapThrough(ev.clientX, ev.clientY); };
+      svg.addEventListener("pointermove", sm); svg.addEventListener("pointerup", su); svg.addEventListener("pointercancel", su);
+      return;
+    }
+    activeId = e.pointerId;
+    try { svg.setPointerCapture(e.pointerId); } catch (x) {}
     snap();
-    var erasing = tool !== "pen", changed = false;
-    var er = function (q) { if (tool === "serase" ? eraseStroke(q[0], q[1]) : erasePart(q[0], q[1])) { changed = true; draw(gM, mine); var now = Date.now(); if (now - sendT > 250) { sendT = now; emit(false); } } };
-    if (erasing) er(pt(e)); else cur = { c: color, p: pt(e) };
+    var erasing = tool !== "pen", changed = false, raf = 0;
+    var er = function (q) {
+      if (tool === "serase" ? eraseStroke(q[0], q[1]) : erasePart(q[0], q[1])) {
+        changed = true;
+        if (!raf) raf = requestAnimationFrame(function () { raf = 0; draw(gM, mine); });
+        var now = Date.now(); if (now - sendT > 250) { sendT = now; emit(false); }
+      }
+    };
+    var cl = null, t0 = Date.now(), ox = e.clientX, oy = e.clientY, far = false;
+    if (erasing) er(pt(e));
+    else { ensureLive(); cur = { c: color, p: pt(e) }; cl = [e.clientX, e.clientY]; paintLive(cl, null, color); }
     var move = function (ev) {
-      var q = pt(ev);
-      if (erasing) { er(q); return; }
-      var n = cur.p.length;
-      if (Math.abs(q[0] - cur.p[n - 2]) + Math.abs(q[1] - cur.p[n - 1]) < 3) return;
-      cur.p.push(q[0], q[1]); draw(gM, mine.concat([cur]));
+      if (ev.pointerId !== activeId) return;
+      if (ev.pointerType === "pen") penAt = Date.now();
+      var list = ev.getCoalescedEvents ? ev.getCoalescedEvents() : null;
+      if (!list || !list.length) list = [ev];
+      for (var j = 0; j < list.length; j++) {
+        var q = pt(list[j]);
+        if (erasing) { er(q); continue; }
+        var n = cur.p.length;
+        if (Math.abs(q[0] - cur.p[n - 2]) + Math.abs(q[1] - cur.p[n - 1]) < 1.2) continue;
+        cur.p.push(q[0], q[1]); cl.push(list[j].clientX, list[j].clientY);
+        if (Math.abs(list[j].clientX - ox) + Math.abs(list[j].clientY - oy) > 8) far = true;
+      }
+      if (erasing) return;
+      var pr = [], pl = ev.getPredictedEvents ? ev.getPredictedEvents() : [];
+      for (var t = 0; t < pl.length && t < 2; t++) pr.push(pl[t].clientX, pl[t].clientY);
+      paintLive(cl, pr, cur.c);
       var now = Date.now(); if (now - sendT > 250) { sendT = now; emit(false); }
     };
-    var up = function () {
+    var up = function (ev) {
+      if (ev.pointerId !== activeId) return;
+      activeId = null;
+      if (ev.pointerType === "pen") penAt = Date.now();
       svg.removeEventListener("pointermove", move); svg.removeEventListener("pointerup", up); svg.removeEventListener("pointercancel", up);
-      if (erasing) { if (changed) { lsSet(key, mine); emit(true); } else hist.pop(); return; }
-      if (cur) { mine.push(cur); cur = null; lsSet(key, mine); redraw(); emit(true); }
+      if (erasing) { if (raf) { cancelAnimationFrame(raf); raf = 0; draw(gM, mine); } if (changed) { setTimeout(function () { lsSet(key, mine); }, 0); emit(true); } else hist.pop(); return; }
+      if (cur && !far && Date.now() - t0 < 300 && ev.type === "pointerup" && tapThrough(ev.clientX, ev.clientY)) { cur = null; clearLive(); hist.pop(); return; }
+      if (cur) {
+        var s0 = cur; mine.push(s0); cur = null;
+        if (ensure()) gM.appendChild(el(s0));   /* 그 획 하나만 붙인다 */
+        clearLive();
+        setTimeout(function () { lsSet(key, mine); }, 0); emit(true);
+      }
     };
     svg.addEventListener("pointermove", move); svg.addEventListener("pointerup", up); svg.addEventListener("pointercancel", up);
   }
@@ -134,7 +242,7 @@
     if (!bar) { bar = document.createElement("div"); bar.className = "ink-bar no-print"; document.body.appendChild(bar); }
     bar.classList.toggle("on", on);
     bar.innerHTML = (KT.classBtn ? '<button type="button" class="ink-class" data-ink="class" title="수업 열기·참여">' + (window.Live && Live.code() ? "수업 " + Live.code() : "수업") + "</button>" : "") +
-      '<button type="button" class="ink-pen" data-ink="toggle" title="판서" aria-pressed="' + on + '">✎</button>' +
+      '<button type="button" class="ink-pen" data-ink="toggle" title="' + (on ? "필기 끄기" : "필기 — 화면 위에 펜으로 쓰기") + '" aria-pressed="' + on + '"><i>✎</i>' + (on ? "끄기" : "필기") + "</button>" +
       (on ? COLORS.map(function (c) { return '<button type="button" class="ink-c' + (tool === "pen" && c[0] === color ? " sel" : "") + '" data-ink-c="' + c[0] + '" title="' + c[1] + '" style="--c:' + (c[0] === "hl" ? "#F2D65C" : c[0]) + '"></button>'; }).join("") +
         '<span class="ink-sep"></span><button type="button" class="ink-t ink-e' + (tool === "serase" ? " sel" : "") + '" data-ink="serase" title="획 지우개 — 닿은 획을 통째로">' + IC_S + '</button>' +
         '<button type="button" class="ink-t ink-e' + (tool === "perase" ? " sel" : "") + '" data-ink="perase" title="부분 지우개 — 닿은 부분만">' + IC_P + "</button>" +
@@ -165,7 +273,7 @@
     var m = rootEl(), h = m ? (m === document.body ? document.documentElement.scrollHeight : m.scrollHeight) + "/" + Math.round(m.getBoundingClientRect().width) : "";
     if (pageKey() !== key || h !== lastH) { lastH = h; check(); }
   }, 400);
-  window.addEventListener("resize", redraw);
+  window.addEventListener("resize", function () { redraw(); fitLive(); });
   setTimeout(function () { check(); renderBar(); }, 0);
 
   window.Ink = {
