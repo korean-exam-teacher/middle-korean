@@ -738,6 +738,7 @@
       v.textContent = ok ? "정답입니다. (" + CIRC[it.answer] + ")" : "아쉬워요. 정답은 " + CIRC[it.answer] + "입니다. 해설을 확인해 보세요.";
       if (!silent && !T()) {
         progress.solved[it.key] = { ok: ok, n: n, t: Date.now() }; saveProgress();
+        if (window.KMA) KMA.record("hak:" + it.key, ok, (isBasicKey(it.key) ? "기초학력" : it.hp ? "학력평가" : "평가원 기출") + (it.area ? "·" + it.area : ""));
         var res = d.querySelector("summary .res"); res.className = "res " + (ok ? "o" : "x"); res.textContent = ok ? "맞힘" : "틀림";
       }
     }
