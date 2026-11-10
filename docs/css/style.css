@@ -607,3 +607,16 @@ details.kq.hp-exam > summary .st { display: none; }
 .chips.mode-row { margin: 10px 0 22px; padding-bottom: 18px; border-bottom: 1px solid var(--rule-2, #e7e7e4); }
 .chips.mode-row + .chips { margin-bottom: 26px; }
 .chips.mode-row + .area-tabs { margin-bottom: 22px; }
+/* v97 기초학력 증진 */
+.basic-banner { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 18px; margin: 34px 0 6px; padding: 22px 26px; border: 1px solid var(--line, #E7E7E4); background: var(--surface, #fff); border-radius: 10px; text-decoration: none; color: inherit; transition: border-color .15s; }
+.basic-banner:hover { border-color: var(--brand, #2F4F7F); }
+.basic-banner .bb-t { font-family: var(--serif, serif); font-size: 22px; white-space: nowrap; }
+.basic-banner .bb-d { font-size: 14px; color: var(--text-sub, #62625E); word-break: keep-all; }
+.basic-banner .bb-go { font-size: 14px; color: var(--brand, #2F4F7F); white-space: nowrap; }
+@media (max-width: 700px) { .basic-banner { grid-template-columns: 1fr; gap: 6px; } }
+.basic-lv { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 14px 0 22px; }
+.basic-lv div { border: 1px solid var(--line, #E7E7E4); border-radius: 8px; padding: 12px 14px; font-size: 13.5px; color: var(--text-sub, #62625E); line-height: 1.6; }
+.basic-lv b { display: block; color: var(--text, #262625); font-size: 14.5px; margin-bottom: 2px; }
+@media (max-width: 700px) { .basic-lv { grid-template-columns: 1fr; } }
+.basic-next { display: flex; justify-content: space-between; gap: 10px; margin: 34px 0 10px; padding-top: 18px; border-top: 1px solid var(--line, #E7E7E4); }
+.subj.c-basic .meta { word-break: keep-all; }
