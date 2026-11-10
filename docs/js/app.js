@@ -499,13 +499,15 @@
   /* 근거 자료 표시 */
   function srcMark(st, i) {
     var s = (st.sources || [])[i];
-    return s ? ' <a class="src-mark" href="' + esc(s.u) + '" target="_blank" rel="noopener" title="' + esc(s.t) + '">[' + (i + 1) + "]</a>" : "";
+    if (!s) return "";
+    /* 교과서·학술서처럼 주소가 없는 근거는 링크 없이 번호만 */
+    return s.u ? ' <a class="src-mark" href="' + esc(s.u) + '" target="_blank" rel="noopener" title="' + esc(s.t) + '">[' + (i + 1) + "]</a>" : ' <span class="src-mark" title="' + esc(s.t) + '">[' + (i + 1) + "]</span>";
   }
   function sourcesHtml(st) {
     var S = st.sources || [];
     if (!S.length) return T() ? '<div class="sources warn-src">이 주제의 개념 설명은 아직 공식 자료와 대조 중입니다.</div>' : "";
     return '<details class="sources"><summary>근거 자료 <span class="muted small">' + S.length + "</span></summary><ol>" +
-      S.map(function (s) { return '<li><a href="' + esc(s.u) + '" target="_blank" rel="noopener">' + esc(s.t) + "</a>" + (s.k ? ' <span class="muted small">' + esc(s.k) + "</span>" : "") + "</li>"; }).join("") + "</ol>" + (st.checked ? '<p class="muted small">' + esc(st.checked) + " 대조</p>" : "") + "</details>";
+      S.map(function (s) { return "<li>" + (s.u ? '<a href="' + esc(s.u) + '" target="_blank" rel="noopener">' + esc(s.t) + "</a>" : esc(s.t)) + (s.k ?' <span class="muted small">' + esc(s.k) + "</span>" : "") + "</li>"; }).join("") + "</ol>" + (st.checked ? '<p class="muted small">' + esc(st.checked) + " 대조</p>" : "") + "</details>";
   }
 
   /* 중학교: 사례·그림·영상 블록 */
