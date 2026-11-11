@@ -200,3 +200,13 @@ details.sources[open] summary::before { content: "－ "; }
 .media img { max-height: 560px; }
 .subj.c-high .in { padding-block: 26px; }
 .subj.c-high h3 { font-size: 22px; }
+
+/* ── v111: 화면 가득 (100%에서 상하좌우 여백을 거의 남기지 않는다) ── */
+.inner, .gnb .inner, .foot89 .inner { padding-inline: 12px; }
+.wrap, .wrap.narrow { padding: 12px 12px 84px; }
+.hero89 { padding: 12px 0 0; }
+.hero89 .jar { width: 76px; height: 72px; margin-bottom: 8px; }
+.hero89 .jar::before { width: 30px; height: 6px; top: -3px; }
+.hero89 h1 { margin-bottom: 10px; }
+.kq-body.two { gap: 22px; }
+.choices button.sel { border-color: var(--brand, #2F4F7F); box-shadow: inset 0 0 0 1px var(--brand, #2F4F7F); }
