@@ -11,6 +11,10 @@
  *   - getCoalescedEvents(사이 점까지)·getPredictedEvents(앞질러 그리기)로 펜 끝을 바짝 따라간다.
  *   - 펜·손가락·마우스 모두 쓴다. 펜이 닿아 있거나 막 뗀 때(0.6초)만 손바닥(터치)을 무시하고, 펜을 쓰는 기기에서는 손가락으로 끌면 화면이 내려간다.
  *   - iPad: 길게 누름·확대경·글자 고르기를 막는다(touchstart 막기, user-select 끔).
+ * v114: 필기를 그 아래 있는 것에 붙여 둔다(획마다 a = 붙인 곳의 열쇠)
+ *   - 획을 긋기 시작한 자리 아래의 문항 그림·문항 칸·문단을 찾아, 좌표를 그것의 왼쪽 위·너비(=1000) 기준으로 적는다.
+ *   - 화면 크기가 다르거나(선생님 큰 화면 · 학생 태블릿) 위쪽 내용의 높이가 달라도 그 그림·칸 위 같은 자리에 나타난다. 접어서 안 보이면 필기도 숨는다.
+ *   - 붙일 곳이 없는 빈 자리의 획과 예전 획(a 없음)은 전처럼 본문 너비 기준.
  * v111: 화면 전체에 쓴다 · 손가락 단추 · 과제 화면 같은 덧창에서도 쓴다
  *   - 필기 층이 문서 전체(머리·옆 여백 포함)를 덮는다. 좌표는 전처럼 본문 너비 1000 기준이라 예전 필기는 그 자리에 그대로.
  *   - 손가락 단추: 필기를 켠 채로 화면을 누르고 옮길 수 있다(필기는 보이기만 함). 다시 누르거나 색을 고르면 펜으로.
@@ -115,6 +119,62 @@
     if (main === document.body) { r = { left: -scrollX, top: -scrollY }; w = document.documentElement.clientWidth; }
     return [Math.round((e.clientX - r.left) / w * 1000), Math.round((e.clientY - r.top) / w * 1000)];
   }
+  var BLOCKS = ["img", ".q", ".gm-q", ".gm-pas", ".bk-sv-q", ".bk-sv-p", ".qb", ".bk-solve-item", "details.kq", ".pg-body", ".detail", ".pic", ".pas", ".ptext", ".bogi", ".choices", ".chs", ".nums", "table", "li", "p", "h1", "h2", "h3", "dd", "dt", "article", "section"];
+  var BSEL = BLOCKS.join(",");
+  function scopeEl() { return host || document.body; }
+  /* 그림의 열쇠: 주소의 경로. 그림을 통째로 담은 주소(data:)는 길이와 짧은 요약값만(획마다 적어 두므로 짧아야 한다) */
+  function srcKey(im) {
+    var u = im.getAttribute("src") || "", n = u.length, k;
+    if (im._ik && im._ikn === n) return im._ik;
+    if (u.slice(0, 5) === "data:") { var h = 5381, step = Math.max(1, Math.floor(n / 4000)); for (var i = 0; i < n; i += step) h = ((h << 5) + h + u.charCodeAt(i)) | 0; k = "d" + n.toString(36) + "." + (h >>> 0).toString(36); }
+    else { try { k = new URL(u, location.href).pathname; } catch (e) { k = u; } }
+    im._ik = k; im._ikn = n; return k;
+  }
+  function sameSrc(sc, k) { var out = [], l = sc.getElementsByTagName("img"); for (var i = 0; i < l.length; i++) if (srcKey(l[i]) === k) out.push(l[i]); return out; }
+  /* 화면의 한 점 아래에서 필기를 붙일 곳 → { el, key } (없으면 null) */
+  function anchorAt(x, y) {
+    if (!svg) return null;
+    svg.style.pointerEvents = "none"; if (live) live.style.display = "none";
+    var t = document.elementFromPoint(x, y);
+    svg.style.pointerEvents = ""; if (live) live.style.display = "";
+    var sc = scopeEl();
+    if (!t || !sc.contains(t) || (bar && bar.contains(t)) || !t.closest) return null;
+    var a = t.closest(BSEL); if (!a || a === sc || !sc.contains(a)) return null;
+    var r = a.getBoundingClientRect(); if (r.width < 24 || r.height < 8) return null;
+    if (a.tagName === "IMG") { var k = srcKey(a), same = sameSrc(sc, k); return { el: a, key: "img|" + k + "|" + Math.max(0, same.indexOf(a)) }; }
+    for (var i = 1; i < BLOCKS.length; i++) if (a.matches(BLOCKS[i])) { var idx = Array.prototype.indexOf.call(sc.querySelectorAll(BLOCKS[i]), a); return idx < 0 ? null : { el: a, key: BLOCKS[i] + "|" + idx }; }
+    return null;
+  }
+  function findAnchor(key, cache) {
+    if (cache && key in cache) return cache[key];
+    var sc = scopeEl(), p = key.split("|"), e = null;
+    if (p[0] === "img") e = sameSrc(sc, p.slice(1, -1).join("|"))[+p[p.length - 1]] || null;
+    else if (BLOCKS.indexOf(p[0]) > 0) e = sc.querySelectorAll(p[0])[+p[1]] || null;
+    if (cache) cache[key] = e;
+    return e;
+  }
+  /* 바탕 좌표(본문·덧창 기준 칸)의 원점과 너비 — 화면 좌표로 */
+  function baseGeo() {
+    if (host) { var g = hostGeo(); return { ox: g.ox, oy: g.oy, w: g.w }; }
+    if (main === document.body) return { ox: -scrollX, oy: -scrollY, w: document.documentElement.clientWidth || 1 };
+    var r = main.getBoundingClientRect(); return { ox: r.left, oy: r.top, w: r.width || 1 };
+  }
+  /* 붙여 둔 획들을 지금 그것이 있는 자리로 옮긴다(배치가 바뀔 때마다) */
+  function placeAll() {
+    if (!svg || !main) return;
+    var b = null, cache = {};
+    [gT, gM].forEach(function (g) {
+      for (var n = g.firstChild; n; n = n.nextSibling) {
+        var st = n._s; if (!st || !st.a) continue;
+        if (!b) b = baseGeo();
+        var e = findAnchor(st.a, cache), r = e ? e.getBoundingClientRect() : null;
+        if (!r || r.width < 2) { if (n.style.display !== "none") n.style.display = "none"; continue; }
+        var k = r.width / b.w, tf = "translate(" + ((r.left - b.ox) / b.w * 1000).toFixed(2) + " " + ((r.top - b.oy) / b.w * 1000).toFixed(2) + ") scale(" + k.toFixed(5) + ")";
+        if (n._tf !== tf) { n._tf = tf; n.setAttribute("transform", tf); n.setAttribute("stroke-width", ((st.c === "hl" ? 16 : 3.2) / k).toFixed(2)); }
+        if (n.style.display === "none") n.style.display = "";
+      }
+    });
+  }
   function pathD(p) {
     if (p.length < 4) return "M" + p[0] + " " + p[1] + "l0.1 0";
     var d = "M" + p[0] + " " + p[1];
@@ -127,9 +187,10 @@
     path.setAttribute("stroke", hl ? "#F2D65C" : s.c); path.setAttribute("stroke-width", hl ? 16 : 3.2);
     path.setAttribute("stroke-linecap", "round"); path.setAttribute("stroke-linejoin", "round");
     if (hl) { path.setAttribute("stroke-opacity", ".38"); path.style.mixBlendMode = "multiply"; }
+    path._s = s;
     return path;
   }
-  function draw(g, list) { while (g.firstChild) g.removeChild(g.firstChild); list.forEach(function (s) { g.appendChild(el(s)); }); }
+  function draw(g, list) { while (g.firstChild) g.removeChild(g.firstChild); list.forEach(function (s) { g.appendChild(el(s)); }); placeAll(); }
   function redraw() { if (!ensure()) return; draw(gT, teacher); draw(gM, mine); }   /* 긋는 중인 획은 캔버스(ink-live)에 있다 */
   function emit(final) { listeners.forEach(function (f) { try { f(cur ? mine.concat([cur]) : mine, key, final); } catch (e) { console.error(e); } }); }
 
@@ -141,38 +202,44 @@
     var dx = bx - ax, dy = by - ay, l = dx * dx + dy * dy, t = l ? Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / l)) : 0;
     var x = ax + t * dx - px, y = ay + t * dy - py; return Math.sqrt(x * x + y * y);
   }
-  function hits(s, x, y, r) {
-    var p = s.p, rr = r + (s.c === "hl" ? 8 : 2);
+  function hits(s, x, y, r, k) {
+    var p = s.p, rr = (r + (s.c === "hl" ? 8 : 2)) / (k || 1);
     if (p.length < 4) return Math.hypot(p[0] - x, p[1] - y) <= rr;
     for (var i = 0; i < p.length - 2; i += 2) if (segDist(x, y, p[i], p[i + 1], p[i + 2], p[i + 3]) <= rr) return true;
     return false;
   }
+  /* 화면의 한 점을 그 획의 좌표로: [x, y, 배율] (붙인 곳이 지금 안 보이면 null) */
+  function locOf(s, cx, cy, b, cache) {
+    if (!s.a) return [(cx - b.ox) / b.w * 1000, (cy - b.oy) / b.w * 1000, 1];
+    var e = findAnchor(s.a, cache), r = e ? e.getBoundingClientRect() : null;
+    if (!r || r.width < 2) return null;
+    return [(cx - r.left) / r.width * 1000, (cy - r.top) / r.width * 1000, r.width / b.w];
+  }
   /* 획 지우개: 닿은 획을 통째로 */
-  function eraseStroke(x, y) {
+  function eraseStroke(cx, cy, b, cache) {
     var before = mine.length;
-    mine = mine.filter(function (s) { return !hits(s, x, y, ER.stroke); });
+    mine = mine.filter(function (s) { var q = locOf(s, cx, cy, b, cache); return !(q && hits(s, q[0], q[1], ER.stroke, q[2])); });
     return mine.length !== before;
   }
   /* 부분 지우개: 닿은 부분만 잘라 내고 나머지는 남긴다 */
-  function densify(p) {
+  function densify(p, step) {
     var out = [p[0], p[1]];
     for (var i = 2; i < p.length; i += 2) {
-      var ax = p[i - 2], ay = p[i - 1], bx = p[i], by = p[i + 1], d = Math.hypot(bx - ax, by - ay), n = Math.max(1, Math.ceil(d / 3));
+      var ax = p[i - 2], ay = p[i - 1], bx = p[i], by = p[i + 1], d = Math.hypot(bx - ax, by - ay), n = Math.max(1, Math.ceil(d / step));
       for (var k = 1; k <= n; k++) out.push(Math.round(ax + (bx - ax) * k / n), Math.round(ay + (by - ay) * k / n));
     }
     return out;
   }
-  function erasePart(x, y) {
+  function erasePart(cx, cy, b, cache) {
     var changed = false, out = [];
     mine.forEach(function (s) {
-      if (!hits(s, x, y, ER.part)) { out.push(s); return; }
+      var q = locOf(s, cx, cy, b, cache);
+      if (!q || !hits(s, q[0], q[1], ER.part, q[2])) { out.push(s); return; }
       changed = true;
-      var p = densify(s.p), run = [], r = ER.part + (s.c === "hl" ? 8 : 2);
-      for (var i = 0; i < p.length; i += 2) {
-        if (Math.hypot(p[i] - x, p[i + 1] - y) <= r) { if (run.length >= 4) out.push({ c: s.c, p: run }); run = []; }
-        else run.push(p[i], p[i + 1]);
-      }
-      if (run.length >= 4) out.push({ c: s.c, p: run });
+      var x = q[0], y = q[1], p = densify(s.p, 3 / q[2]), run = [], r = (ER.part + (s.c === "hl" ? 8 : 2)) / q[2];
+      var keep = function () { if (run.length >= 4) { var o = { c: s.c, p: run }; if (s.a) o.a = s.a; out.push(o); } run = []; };
+      for (var i = 0; i < p.length; i += 2) { if (Math.hypot(p[i] - x, p[i + 1] - y) <= r) keep(); else run.push(p[i], p[i + 1]); }
+      keep();
     });
     if (changed) mine = out;
     return changed;
@@ -226,26 +293,31 @@
     try { svg.setPointerCapture(e.pointerId); } catch (x) {}
     snap();
     var erasing = tool !== "pen", changed = false, raf = 0;
-    var er = function (q) {
-      if (tool === "serase" ? eraseStroke(q[0], q[1]) : erasePart(q[0], q[1])) {
+    var eb = erasing ? baseGeo() : null, ec = {};
+    var er = function (ev) {
+      if (tool === "serase" ? eraseStroke(ev.clientX, ev.clientY, eb, ec) : erasePart(ev.clientX, ev.clientY, eb, ec)) {
         changed = true;
         if (!raf) raf = requestAnimationFrame(function () { raf = 0; draw(gM, mine); });
         var now = Date.now(); if (now - sendT > 250) { sendT = now; emit(false); }
       }
     };
     var cl = null, t0 = Date.now(), ox = e.clientX, oy = e.clientY, far = false;
-    if (erasing) er(pt(e));
-    else { ensureLive(); cur = { c: color, p: pt(e) }; cl = [e.clientX, e.clientY]; paintLive(cl, null, color); }
+    /* v114: 긋기 시작한 자리 아래의 그림·칸에 붙인다. 좌표는 그것의 왼쪽 위·너비 기준 */
+    var A = erasing ? null : anchorAt(e.clientX, e.clientY), AR = A ? A.el.getBoundingClientRect() : null;
+    var cpt = function (ev) { return AR ? [Math.round((ev.clientX - AR.left) / AR.width * 1000), Math.round((ev.clientY - AR.top) / AR.width * 1000)] : pt(ev); };
+    var minStep = AR ? Math.max(1.2, 1.2 * W() / AR.width) : 1.2;
+    if (erasing) er(e);
+    else { ensureLive(); cur = { c: color, p: cpt(e) }; if (A) cur.a = A.key; cl = [e.clientX, e.clientY]; paintLive(cl, null, color); }
     var move = function (ev) {
       if (ev.pointerId !== activeId) return;
       if (ev.pointerType === "pen") penAt = Date.now();
       var list = ev.getCoalescedEvents ? ev.getCoalescedEvents() : null;
       if (!list || !list.length) list = [ev];
       for (var j = 0; j < list.length; j++) {
-        var q = pt(list[j]);
-        if (erasing) { er(q); continue; }
+        if (erasing) { er(list[j]); continue; }
+        var q = cpt(list[j]);
         var n = cur.p.length;
-        if (Math.abs(q[0] - cur.p[n - 2]) + Math.abs(q[1] - cur.p[n - 1]) < 1.2) continue;
+        if (Math.abs(q[0] - cur.p[n - 2]) + Math.abs(q[1] - cur.p[n - 1]) < minStep) continue;
         cur.p.push(q[0], q[1]); cl.push(list[j].clientX, list[j].clientY);
         if (Math.abs(list[j].clientX - ox) + Math.abs(list[j].clientY - oy) > 8) far = true;
       }
@@ -264,7 +336,7 @@
       if (cur && !far && Date.now() - t0 < 300 && ev.type === "pointerup" && tapThrough(ev.clientX, ev.clientY)) { cur = null; clearLive(); hist.pop(); return; }
       if (cur) {
         var s0 = cur; mine.push(s0); cur = null;
-        if (ensure()) gM.appendChild(el(s0));   /* 그 획 하나만 붙인다 */
+        if (ensure()) { gM.appendChild(el(s0)); placeAll(); }   /* 그 획 하나만 붙인다 */
         clearLive();
         setTimeout(function () { lsSet(key, mine); }, 0); emit(true);
       }
@@ -314,6 +386,7 @@
     if (hs) h = "H" + hs.scrollHeight + "/" + hs.clientWidth + "/" + hs.clientHeight;
     else h = m ? document.body.offsetHeight + "/" + m.scrollHeight + "/" + Math.round(m.getBoundingClientRect().width) + "/" + document.documentElement.clientWidth : "";   /* 필기 층 자신은 높이에 넣지 않는다 */
     if (hs !== host || pageKey() !== key || h !== lastH) { lastH = h; check(); }
+    else placeAll();   /* 그림이 늦게 뜨거나 내용이 펼쳐져 자리가 바뀐 것을 따라간다 */
   }, 400);
   /* 덧창을 스크롤하면 필기도 함께 움직인다 */
   document.addEventListener("scroll", function (e) { if (host && e.target === host && svg) svg.setAttribute("viewBox", hostGeo().vb); }, true);
