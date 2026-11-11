@@ -2,7 +2,8 @@
  * 로그인 없이 쓰기 (2026-11-09 v87)
  * - 로그인 화면·Firebase 계정 기능을 뺐다. 학습 기록은 이 브라우저(localStorage)에만 저장된다.
  * - 교사용 내용(성취기준 원문, 지도 유의점, 답 모두 펼치기, 학습지 인쇄, 수업 열기)은 화면 위 '교사용 보기' 스위치로 연다.
- *   누구나 켤 수 있다. 나중에 사이트 전체 로그인이 생기면 교사 계정에만 열리게 바꾼다.
+ *   v105(2026-11-11): 선생님·관리자로 등록된 아이디로 로그인했을 때만 스위치가 보이고 켜진다(학생은 켤 수 없다).
+ *   선생님인지는 account.js 가 로그인할 때 확인해 둔 값(localStorage kma.role)으로 본다.
  * - 학급·과제·공유처럼 여러 기기가 함께 쓰는 기능은 그 로그인 단계에서 다시 연다(코드는 남겨 둠).
  *
  * 사용자 객체: { uid, name, role, isTeacher }
@@ -15,7 +16,8 @@
   var uid = lsGet(LS_UID, null);
   if (!uid) { uid = "g" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); lsSet(LS_UID, uid); }
   var current = { uid: uid, name: "", role: "student", isTeacher: false };
-  function applyTV() { var on = !!lsGet(LS_TV, false); current.isTeacher = on; current.role = on ? "teacher" : "student"; document.documentElement.classList.toggle("tv-on", on); }
+  function canTeach() { var s = lsGet("kma.s", null), r = lsGet("kma.role", null); return !!(s && r && r.id === s.id && r.r); }
+  function applyTV() { var on = !!lsGet(LS_TV, false) && canTeach(); current.isTeacher = on; current.role = on ? "teacher" : "student"; document.documentElement.classList.toggle("tv-on", on); }
   applyTV();
   function emit() { listeners.forEach(function (f) { try { f(current); } catch (e) { console.error(e); } }); }
 
@@ -47,13 +49,17 @@
     }
   };
 
+  /* 로그인한 아이디가 선생님인지 확인되면(또는 아니게 되면) 화면을 다시 맞춘다 */
+  var wasCan = canTeach();
+  document.addEventListener("kma:role", function () { var was = current.isTeacher, c = canTeach(); applyTV(); if (was !== current.isTeacher || c !== wasCan) { wasCan = c; emit(); } });
   window.Auth = {
     mode: "open",
     init: function () { return Promise.resolve(); },
     onChange: function (f) { listeners.push(f); },
     current: function () { return current; },
     teacherView: function () { return current.isTeacher; },
-    setTeacherView: function (on) { lsSet(LS_TV, !!on); applyTV(); emit(); },
+    canTeach: canTeach,
+    setTeacherView: function (on) { lsSet(LS_TV, !!on && canTeach()); applyTV(); emit(); },
     loadProgress: function () { return Promise.resolve(lsGet(LS_PROG + uid, {})); },
     saveProgress: function (p) { lsSet(LS_PROG + uid, p); return Promise.resolve(); },
     signOut: function () { return Promise.resolve(); }

@@ -44,7 +44,9 @@
   if (document.readyState !== "loading") bustSoon(); else document.addEventListener("DOMContentLoaded", bustSoon);
   if (window.MutationObserver) new MutationObserver(bustSoon).observe(document.documentElement, { childList: true, subtree: true });
   function toast(m) { var t = document.getElementById("toast"); if (!t) { t = document.createElement("div"); t.id = "toast"; t.className = "toast kt-toast"; document.body.appendChild(t); } t.textContent = m; t.classList.add("show"); clearTimeout(toast._t); toast._t = setTimeout(function () { t.classList.remove("show"); }, 2200); }
-  function T() { return window.Auth ? Auth.teacherView() : true; }
+  /* v105: 수업은 선생님·관리자 아이디로 로그인했을 때만 열 수 있다(account.js 가 확인해 둔 kma.role) */
+  function canTeach() { try { var s = JSON.parse(localStorage.getItem("kma.s") || "null"), r = JSON.parse(localStorage.getItem("kma.role") || "null"); return !!(s && r && r.id === s.id && r.r); } catch (e) { return false; } }
+  function T() { return window.Auth ? Auth.teacherView() : canTeach(); }
   function path() { return location.pathname.replace(/index\.html$/, ""); }
   function here() { return path() + (KT.keyPath ? location.hash : (location.hash || "#/")); }
   function inkKey() { return window.Ink ? Ink.key() : ""; }
@@ -138,6 +140,7 @@
     resPayload(h).then(function (res) { push({ url: u, hash: h, kq: "", scroll: 0, res: res, ink: { h: k, s: window.Ink ? Ink.mine(k) : [] } }); });
   }
   function openSession() {
+    if (!canTeach()) { toast("수업은 선생님 아이디로 로그인해야 열 수 있어요."); return; }
     if (!T()) { if (window.Auth && Auth.setTeacherView) Auth.setTeacherView(true); else { toast("'교사용 보기'를 켠 뒤 수업을 열 수 있습니다."); return; } }
     if (role === "teacher") { renderPanel(); return; }
     var c = newCode(), tries = 0;
@@ -250,7 +253,7 @@
     if (m) { m.remove(); return; }
     m = document.createElement("div"); m.id = "live-menu"; m.className = "live-menu no-print";
     m.innerHTML = '<form data-live-join><input name="code" maxlength="6" placeholder="수업 코드" autocomplete="off" aria-label="수업 코드"><button type="submit">참여</button></form>' +
-      '<button type="button" class="lm-open" data-act="live-open">이 화면으로 수업 열기</button>';
+      (canTeach() ? '<button type="button" class="lm-open" data-act="live-open">이 화면으로 수업 열기</button>' : "");
     document.body.appendChild(m);
     var r = btn.getBoundingClientRect();
     m.style.left = Math.max(8, r.left) + "px"; m.style.bottom = (innerHeight - r.top + 8) + "px";

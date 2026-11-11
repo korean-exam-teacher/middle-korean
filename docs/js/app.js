@@ -119,7 +119,7 @@
     return '<header class="topbar"><div class="board"><div class="topbar-in">' +
       '<a class="brand" href="#/">국어의 <b>모든 것</b><small class="stage">1단계 · 개념 학습</small></a>' +
       '<nav class="nav">' + nav.map(function (n) { return '<a href="' + n[1] + '"' + (active === n[0] ? ' class="on"' : "") + ">" + n[2] + "</a>"; }).join("") + "</nav>" +
-      '<div class="who"><span id="live-slot"></span><label class="tv-sw" title="성취기준 원문·지도 유의점·정답 보기·학습지 인쇄·수업 열기를 보여 줍니다."><input type="checkbox" data-act="tv"' + (T() ? " checked" : "") + '><span>교사용 보기</span></label>' +
+      '<div class="who"><span id="live-slot"></span>' + (Auth.canTeach && !Auth.canTeach() ? "" : '<label class="tv-sw" title="성취기준 원문·지도 유의점·정답 보기·학습지 인쇄·수업 열기를 보여 줍니다."><input type="checkbox" data-act="tv"' + (T() ? " checked" : "") + '><span>교사용 보기</span></label>') +
       '<a class="hub" href="/suneung-korean/" title="국어의 모든 것 첫 화면(1~5단계)">첫 화면</a></div>' +
       "</div></div></header>" + inner +
       '<footer class="foot">국어의 모든 것 · 1단계 개념 학습 · 2022 개정 국어과 교육과정 기반 · 기출 문항 저작권: 한국교육과정평가원(비영리 학습용) · 학습 기록은 이 브라우저에만 저장됩니다</footer>';
@@ -135,7 +135,7 @@
       '<a class="logo" href="#/" aria-label="1단계 개념 학습 처음 화면"><span class="logo-text"><span class="logo-old" lang="okm">불휘 기픈 남ᄀᆞᆫ</span>' + (V89 ? "" : '<span class="logo-sub">개념 학습</span><span class="logo-gloss">뿌리 깊은 나무는</span>') + "</span></a>" +
       '<nav class="gnb-nav" aria-label="주 메뉴">' + nav.map(function (n) { return '<a class="gnb-link' + (active === n[0] ? " active" : "") + '" href="' + n[1] + '">' + n[2] + "</a>"; }).join("") +
       '<a class="gnb-link sub" href="/suneung-korean/">' + (V89 ? "전체" : "처음 화면") + "</a></nav>" +
-      '<div class="gnb-tools"><span id="live-slot"></span><label class="tv-sw" title="교사용 내용 보기"><input type="checkbox" data-act="tv"' + (T() ? " checked" : "") + '><span>' + (V89 ? "교사" : "교사용 보기") + "</span></label></div>" +
+      '<div class="gnb-tools"><span id="live-slot"></span>' + (Auth.canTeach && !Auth.canTeach() ? "" : '<label class="tv-sw" title="교사용 내용 보기 — 선생님 아이디로 로그인했을 때만 보여요"><input type="checkbox" data-act="tv"' + (T() ? " checked" : "") + '><span>' + (V89 ? "교사" : "교사용 보기") + "</span></label>") + "</div>" +
       "</div></header>" + inner + (V89 ? '<footer class="foot89"><div class="inner"><span class="okm" lang="okm">불휘 기픈 남ᄀᆞᆫ ᄇᆞᄅᆞ매 아니 뮐ᄊᆡ 곶 됴코 여름 하ᄂᆞ니</span><span>국어의 모든 것 · 기출 저작권 한국교육과정평가원</span></div></footer>' : "") + (V89 ? "" :
       '<footer class="foot88"><div class="inner"><div class="foot-top"><span class="foot-name"><span class="okm" lang="okm">불휘 기픈 남ᄀᆞᆫ</span> · 뿌리 깊은 나무는' +
       '<span class="foot-verse" lang="okm">불휘 기픈 남ᄀᆞᆫ ᄇᆞᄅᆞ매 아니 뮐ᄊᆡ 곶 됴코 여름 하ᄂᆞ니<small>「용비어천가」 제2장</small></span></span>' +
