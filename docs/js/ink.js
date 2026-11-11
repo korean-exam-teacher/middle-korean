@@ -11,6 +11,9 @@
  *   - getCoalescedEvents(사이 점까지)·getPredictedEvents(앞질러 그리기)로 펜 끝을 바짝 따라간다.
  *   - 펜·손가락·마우스 모두 쓴다. 펜이 닿아 있거나 막 뗀 때(0.6초)만 손바닥(터치)을 무시하고, 펜을 쓰는 기기에서는 손가락으로 끌면 화면이 내려간다.
  *   - iPad: 길게 누름·확대경·글자 고르기를 막는다(touchstart 막기, user-select 끔).
+ * v116: 필기를 시작하면 화면이 까맣게 되던 것을 고침
+ *   - 긋는 중인 획을 그리는 캔버스(ink-live)의 크기에 위 한도를 둔다(가로·세로 4096, 넓이 400만 점). 수업 중 휴대폰이 선생님 화면 너비로 바뀌면 캔버스가 수천만 점이 되어 기기가 감당하지 못했다.
+ *   - 안드로이드에서는 캔버스를 쓰지 않고 긋는 중인 획도 SVG 한 줄로 그린다(일부 기기에서 빠른 캔버스가 검게 나오는 일이 있어서).
  * v115: 수업에서 선생님이 긋는 중인 획도 바로 보이게 — 획마다 이름표(i, 만든 순서대로 늘어남)를 달고, 긋는 중인 획은 따로 알린다(onChange 넷째 값, showCur)
  * v114: 필기를 그 아래 있는 것에 붙여 둔다(획마다 a = 붙인 곳의 열쇠)
  *   - 획을 긋기 시작한 자리 아래의 문항 그림·문항 칸·문단을 찾아, 좌표를 그것의 왼쪽 위·너비(=1000) 기준으로 적는다.
@@ -53,18 +56,18 @@
   var live = null, lctx = null, LDPR = 1;
   function fitLive() {
     if (!live) return;
-    LDPR = window.devicePixelRatio || 1;
     var w = document.documentElement.clientWidth, h = window.innerHeight;
+    LDPR = Math.max(0.5, Math.min(window.devicePixelRatio || 1, Math.sqrt(4e6 / Math.max(1, w * h)), 4096 / Math.max(1, w), 4096 / Math.max(1, h)));   /* 캔버스가 너무 커지지 않게 */
     live.style.width = w + "px"; live.style.height = h + "px";
     live.width = Math.round(w * LDPR); live.height = Math.round(h * LDPR);
     lctx.setTransform(LDPR, 0, 0, LDPR, 0, 0); lctx.lineCap = "round"; lctx.lineJoin = "round";
   }
+  var NOCANVAS = /Android/i.test(navigator.userAgent || ""), liveEl = null;
   function ensureLive() {
-    if (live) return;
+    if (live || NOCANVAS) return;
     live = document.createElement("canvas"); live.className = "ink-live no-print"; live.setAttribute("aria-hidden", "true");
     document.body.appendChild(live);
-    try { lctx = live.getContext("2d", { desynchronized: true }); } catch (e) { lctx = null; }
-    if (!lctx) lctx = live.getContext("2d");
+    lctx = live.getContext("2d");
     fitLive();
   }
   (function css() {
@@ -253,6 +256,11 @@
   function W() { return host ? hostGeo().w : main === document.body ? document.documentElement.clientWidth : main.getBoundingClientRect().width; }
   /* 지금 긋는 획: 화면 좌표(cl)로 캔버스에 그린다. 예측 점(pr)은 꼬리로만 붙이고 저장하지 않는다 */
   function paintLive(cl, pr, c) {
+    if (NOCANVAS) {   /* 캔버스 없이: 긋는 중인 획을 SVG 한 줄로 */
+      if (!cur || !gM) return;
+      if (!liveEl || !liveEl.parentNode || liveEl._s !== cur) { if (liveEl && liveEl.parentNode) liveEl.parentNode.removeChild(liveEl); liveEl = el(cur); gM.appendChild(liveEl); placeAll(); } else liveEl.setAttribute("d", pathD(cur.p));
+      return;
+    }
     if (!lctx) return;
     lctx.clearRect(0, 0, live.width / LDPR, live.height / LDPR);
     var p = pr && pr.length ? cl.concat(pr) : cl, hl = c === "hl", k = W() / 1000;
@@ -275,7 +283,7 @@
     if (/^(INPUT|SELECT|TEXTAREA)$/.test(c.tagName) && c.type !== "checkbox" && c.type !== "radio") { c.focus(); return true; }
     c.click(); return true;
   }
-  function clearLive() { if (lctx) lctx.clearRect(0, 0, live.width / LDPR, live.height / LDPR); }
+  function clearLive() { if (liveEl) { if (liveEl.parentNode) liveEl.parentNode.removeChild(liveEl); liveEl = null; } if (lctx) lctx.clearRect(0, 0, live.width / LDPR, live.height / LDPR); }
   function down(e) {
     if (!on) return;
     e.preventDefault();
