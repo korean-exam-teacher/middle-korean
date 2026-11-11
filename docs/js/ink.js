@@ -11,6 +11,10 @@
  *   - getCoalescedEvents(사이 점까지)·getPredictedEvents(앞질러 그리기)로 펜 끝을 바짝 따라간다.
  *   - 펜·손가락·마우스 모두 쓴다. 펜이 닿아 있거나 막 뗀 때(0.6초)만 손바닥(터치)을 무시하고, 펜을 쓰는 기기에서는 손가락으로 끌면 화면이 내려간다.
  *   - iPad: 길게 누름·확대경·글자 고르기를 막는다(touchstart 막기, user-select 끔).
+ * v111: 화면 전체에 쓴다 · 손가락 단추 · 과제 화면 같은 덧창에서도 쓴다
+ *   - 필기 층이 문서 전체(머리·옆 여백 포함)를 덮는다. 좌표는 전처럼 본문 너비 1000 기준이라 예전 필기는 그 자리에 그대로.
+ *   - 손가락 단추: 필기를 켠 채로 화면을 누르고 옮길 수 있다(필기는 보이기만 함). 다시 누르거나 색을 고르면 펜으로.
+ *   - [data-ink-host="열쇠"]가 붙은 덧창(스스로 스크롤하는 화면: 과제 풀기 등)이 열려 있으면 그 덧창 위에 쓴다(필기는 열쇠마다 따로 저장).
  */
 (function () {
   var COLORS = [["#2B2A28", "먹"], ["#2F5D9E", "청화"], ["#B5483B", "진사"], ["hl", "형광"]];
@@ -20,7 +24,13 @@
   var KT = window.KME_TOOLS || {};
   var ROOT = KT.root || "#app main";
   function rootEl() { return ROOT === "body" ? document.body : document.querySelector(ROOT); }
-  function pageKey() { return (KT.keyPath ? location.pathname.replace(/index\.html$/, "") : "") + (location.hash || "#/"); }
+  var host = null;   /* v111: 지금 열려 있는 덧창(없으면 null) */
+  function findHost() {
+    var l = document.querySelectorAll("[data-ink-host]"), h = null;
+    for (var i = 0; i < l.length; i++) { var e = l[i]; if (!e.hidden && e.getClientRects().length && e.clientWidth > 0) h = e; }
+    return h;
+  }
+  function pageKey() { if (host) return "host:" + host.getAttribute("data-ink-host"); return (KT.keyPath ? location.pathname.replace(/index\.html$/, "") : "") + (location.hash || "#/"); }
   function lsGet(k) { try { return JSON.parse(localStorage.getItem(LSK + k) || "[]"); } catch (e) { return []; } }
   function lsSet(k, v) { try { if (v.length) localStorage.setItem(LSK + k, JSON.stringify(v)); else localStorage.removeItem(LSK + k); } catch (e) {} }
   var NS = "http://www.w3.org/2000/svg";
@@ -47,6 +57,11 @@
     st.textContent = ".ink-live{position:fixed;left:0;top:0;z-index:26;pointer-events:none}" +
       "body.ink-on{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}" +
       "body.ink-on .ink-layer{pointer-events:auto;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}" +
+      "svg.ink-layer{z-index:54}" +   /* 붙박이 머리(메뉴) 위에도 쓸 수 있게 */
+      ".ink-layer.ink-fixed{position:fixed!important}" +
+      "body.ink-on.ink-hand .ink-layer{pointer-events:none!important}body.ink-on.ink-hand{-webkit-user-select:auto;user-select:auto;-webkit-touch-callout:default}" +
+      ".ink-bar .ink-hand{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;padding:0;border-radius:50%}.ink-bar .ink-hand.sel{background:#2F4F7F;color:#fff}" +
+      ".ink-bar{max-width:calc(100vw - 16px);flex-wrap:wrap}" +
       ".ink-bar .ink-pen{width:auto!important;min-width:36px;padding:0 14px 0 11px!important;border-radius:999px!important;display:inline-flex;align-items:center;gap:5px;font-size:14px!important;height:36px}" +
       ".ink-bar .ink-pen i{font-style:normal;font-size:17px;line-height:1}" +
       "@media print{.ink-live{display:none!important}}";
@@ -66,14 +81,26 @@
       svg.addEventListener("contextmenu", function (e) { if (on) e.preventDefault(); });
     }
     main = m; svg.style.display = "";
-    var r = main.getBoundingClientRect(), w = r.width || 1, hgt = Math.max(main.scrollHeight, r.height);
-    if (main === document.body) { svg.style.height = "0px"; hgt = document.documentElement.scrollHeight; w = document.documentElement.clientWidth; r = { left: -scrollX, top: -scrollY }; }
-    svg.style.left = (r.left + scrollX) + "px"; svg.style.top = (r.top + scrollY) + "px";
-    svg.style.width = w + "px"; svg.style.height = hgt + "px";
-    svg.setAttribute("viewBox", "0 0 1000 " + Math.round(hgt / w * 1000));
+    if (host) {   /* 덧창: 덧창이 보이는 칸에 붙박아 두고, 스크롤한 만큼 그림을 옮긴다 */
+      var hr = host.getBoundingClientRect(), hw = host.clientWidth || 1, hh = host.clientHeight, z = parseInt(getComputedStyle(host).zIndex, 10) || 0;
+      svg.classList.add("ink-fixed");
+      svg.style.left = (hr.left + host.clientLeft) + "px"; svg.style.top = (hr.top + host.clientTop) + "px"; svg.style.width = hw + "px"; svg.style.height = hh + "px";
+      svg.style.zIndex = z + 1; if (bar) { bar.style.zIndex = z + 3; bar.style.bottom = (host.getAttribute("data-ink-bottom") || 16) + "px"; } if (live) live.style.zIndex = z + 2;
+      svg.setAttribute("viewBox", (host.scrollLeft / hw * 1000) + " " + (host.scrollTop / hw * 1000) + " 1000 " + (hh / hw * 1000));
+      return true;
+    }
+    svg.classList.remove("ink-fixed"); svg.style.zIndex = ""; if (bar) { bar.style.zIndex = ""; bar.style.bottom = ""; } if (live) live.style.zIndex = "";
+    /* 문서 전체를 덮는다. 본문(main)의 왼쪽 위가 (0,0), 본문 너비가 1000 */
+    var r = main.getBoundingClientRect(), w = r.width || 1, mx = r.left + scrollX, my = r.top + scrollY;
+    if (main === document.body) { w = document.documentElement.clientWidth; mx = 0; my = 0; }
+    svg.style.height = "0px"; svg.style.width = "0px";
+    var dw = Math.max(document.documentElement.scrollWidth, document.documentElement.clientWidth), dh = Math.max(document.documentElement.scrollHeight, window.innerHeight);
+    svg.style.left = "0px"; svg.style.top = "0px"; svg.style.width = dw + "px"; svg.style.height = dh + "px";
+    svg.setAttribute("viewBox", (-mx / w * 1000) + " " + (-my / w * 1000) + " " + (dw / w * 1000) + " " + (dh / w * 1000));
     return true;
   }
   function pt(e) {
+    if (host) { var hr = host.getBoundingClientRect(), hw = host.clientWidth || 1; return [Math.round((e.clientX - hr.left - host.clientLeft + host.scrollLeft) / hw * 1000), Math.round((e.clientY - hr.top - host.clientTop + host.scrollTop) / hw * 1000)]; }
     var r = main.getBoundingClientRect(), w = r.width;
     if (main === document.body) { r = { left: -scrollX, top: -scrollY }; w = document.documentElement.clientWidth; }
     return [Math.round((e.clientX - r.left) / w * 1000), Math.round((e.clientY - r.top) / w * 1000)];
@@ -141,7 +168,7 @@
     return changed;
   }
   var penAt = 0, penSeen = false, activeId = null;
-  function W() { return main === document.body ? document.documentElement.clientWidth : main.getBoundingClientRect().width; }
+  function W() { return host ? (host.clientWidth || 1) : main === document.body ? document.documentElement.clientWidth : main.getBoundingClientRect().width; }
   /* 지금 긋는 획: 화면 좌표(cl)로 캔버스에 그린다. 예측 점(pr)은 꼬리로만 붙이고 저장하지 않는다 */
   function paintLive(cl, pr, c) {
     if (!lctx) return;
@@ -179,7 +206,7 @@
       var sy = e.clientY, sx = e.clientX, id0 = e.pointerId;
       try { svg.setPointerCapture(id0); } catch (x) {}
       var ox = sx, oy = sy, t0 = Date.now();
-      var sm = function (ev) { if (ev.pointerId !== id0) return; window.scrollBy(sx - ev.clientX, sy - ev.clientY); sx = ev.clientX; sy = ev.clientY; };
+      var sm = function (ev) { if (ev.pointerId !== id0) return; (host || window).scrollBy(sx - ev.clientX, sy - ev.clientY); sx = ev.clientX; sy = ev.clientY; };
       var su = function (ev) { if (ev.pointerId !== id0) return; svg.removeEventListener("pointermove", sm); svg.removeEventListener("pointerup", su); svg.removeEventListener("pointercancel", su);
         if (ev.type === "pointerup" && Date.now() - t0 < 350 && Math.abs(ev.clientX - ox) + Math.abs(ev.clientY - oy) < 10) tapThrough(ev.clientX, ev.clientY); };
       svg.addEventListener("pointermove", sm); svg.addEventListener("pointerup", su); svg.addEventListener("pointercancel", su);
@@ -237,26 +264,28 @@
 
   /* ───────── 도구 ───────── */
   var IC_S = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 18c3-6 6-10 9-10s1 6 4 6 2-3 3-4"/><path d="M3 21h18" opacity=".45"/></svg>';
+  var IC_H = '<svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11V4.5a1.5 1.5 0 0 1 3 0V10"/><path d="M12 10V8.5a1.5 1.5 0 0 1 3 0V11"/><path d="M15 11v-1a1.5 1.5 0 0 1 3 0v4.5c0 3.6-2.4 6-6 6h-.5c-2 0-3.3-.8-4.4-2.3L4.3 14.3a1.5 1.5 0 0 1 2.3-1.9L9 14.5"/></svg>';
   var IC_P = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4l5 5-9 9H6v-5z"/><path d="M6 18h14" opacity=".45"/></svg>';
   function renderBar() {
     if (!bar) { bar = document.createElement("div"); bar.className = "ink-bar no-print"; document.body.appendChild(bar); }
     bar.classList.toggle("on", on);
     bar.innerHTML = (KT.classBtn ? '<button type="button" class="ink-class" data-ink="class" title="수업 열기·참여">' + (window.Live && Live.code() ? "수업 " + Live.code() : "수업") + "</button>" : "") +
       '<button type="button" class="ink-pen" data-ink="toggle" title="' + (on ? "필기 끄기" : "필기 — 화면 위에 펜으로 쓰기") + '" aria-pressed="' + on + '"><i>✎</i>' + (on ? "끄기" : "필기") + "</button>" +
-      (on ? COLORS.map(function (c) { return '<button type="button" class="ink-c' + (tool === "pen" && c[0] === color ? " sel" : "") + '" data-ink-c="' + c[0] + '" title="' + c[1] + '" style="--c:' + (c[0] === "hl" ? "#F2D65C" : c[0]) + '"></button>'; }).join("") +
+      (on ? '<button type="button" class="ink-hand' + (tool === "hand" ? " sel" : "") + '" data-ink="hand" aria-pressed="' + (tool === "hand") + '" title="손가락 — 필기는 그대로 두고 화면을 누르고 옮기기 (다시 누르면 펜)">' + IC_H + '</button>' + COLORS.map(function (c) { return '<button type="button" class="ink-c' + (tool === "pen" && c[0] === color ? " sel" : "") + '" data-ink-c="' + c[0] + '" title="' + c[1] + '" style="--c:' + (c[0] === "hl" ? "#F2D65C" : c[0]) + '"></button>'; }).join("") +
         '<span class="ink-sep"></span><button type="button" class="ink-t ink-e' + (tool === "serase" ? " sel" : "") + '" data-ink="serase" title="획 지우개 — 닿은 획을 통째로">' + IC_S + '</button>' +
         '<button type="button" class="ink-t ink-e' + (tool === "perase" ? " sel" : "") + '" data-ink="perase" title="부분 지우개 — 닿은 부분만">' + IC_P + "</button>" +
         '<span class="ink-sep"></span><button type="button" class="ink-t" data-ink="undo" title="되돌리기">↶</button><button type="button" class="ink-t" data-ink="clear" title="모두 지우기">모두 지우기</button>' : "");
     if (svg) svg.setAttribute("data-tool", tool);
+    document.body.classList.toggle("ink-hand", on && tool === "hand");
   }
-  function setOn(v) { on = v; document.body.classList.toggle("ink-on", on); ensure(); renderBar(); }
+  function setOn(v) { on = v; if (!on && tool === "hand") tool = "pen"; document.body.classList.toggle("ink-on", on); ensure(); renderBar(); }
   document.addEventListener("click", function (e) {
     var b = e.target.closest("[data-ink], [data-ink-c]"); if (!b || !bar || !bar.contains(b)) return;
     if (b.dataset.inkC) { color = b.dataset.inkC; tool = "pen"; renderBar(); return; }
     var a = b.dataset.ink;
     if (a === "toggle") setOn(!on);
     else if (a === "class") { if (window.Live && Live.menu) Live.menu(b); }
-    else if (a === "serase" || a === "perase") { tool = tool === a ? "pen" : a; renderBar(); }
+    else if (a === "serase" || a === "perase" || a === "hand") { tool = tool === a ? "pen" : a; renderBar(); }
     else if (a === "undo") { if (hist.length) mine = JSON.parse(hist.pop()); else mine.pop(); lsSet(key, mine); redraw(); emit(true); }
     else if (a === "clear") { if (mine.length) { snap(); mine = []; lsSet(key, mine); redraw(); emit(true); } }
   });
@@ -264,15 +293,20 @@
 
   /* 화면이 바뀌면 그 화면의 판서를 불러오고, 크기가 바뀌면 다시 맞춘다 */
   function check() {
+    host = findHost();
     var k = pageKey();
     if (k !== key) { key = k; mine = lsGet(k); hist = []; teacher = window.Live && Live.teacherInk ? Live.teacherInk(k) : []; cur = null; }
     redraw();
   }
   var lastH = 0;
   setInterval(function () {
-    var m = rootEl(), h = m ? (m === document.body ? document.documentElement.scrollHeight : m.scrollHeight) + "/" + Math.round(m.getBoundingClientRect().width) : "";
-    if (pageKey() !== key || h !== lastH) { lastH = h; check(); }
+    var hs = findHost(), m = rootEl(), h;
+    if (hs) h = "H" + hs.scrollHeight + "/" + hs.clientWidth + "/" + hs.clientHeight;
+    else h = m ? document.body.offsetHeight + "/" + m.scrollHeight + "/" + Math.round(m.getBoundingClientRect().width) + "/" + document.documentElement.clientWidth : "";   /* 필기 층 자신은 높이에 넣지 않는다 */
+    if (hs !== host || pageKey() !== key || h !== lastH) { lastH = h; check(); }
   }, 400);
+  /* 덧창을 스크롤하면 필기도 함께 움직인다 */
+  document.addEventListener("scroll", function (e) { if (host && e.target === host && svg) svg.setAttribute("viewBox", (host.scrollLeft / (host.clientWidth || 1) * 1000) + " " + (host.scrollTop / (host.clientWidth || 1) * 1000) + " 1000 " + (host.clientHeight / (host.clientWidth || 1) * 1000)); }, true);
   window.addEventListener("resize", function () { redraw(); fitLive(); });
   setTimeout(function () { check(); renderBar(); }, 0);
 

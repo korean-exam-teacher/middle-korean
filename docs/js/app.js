@@ -629,7 +629,7 @@
     var onlyNum = it.choiceCrops && !(it.choices && it.choices.length === 5);
     right += '<ul class="choices' + (onlyNum ? " hp-ch" : "") + '">';
     for (var n = 1; n <= 5; n++) right += '<li><button type="button" data-n="' + n + '"' + (onlyNum ? ' aria-label="' + n + '번"' : "") + '><span class="cn">' + CIRC[n] + "</span>" + (onlyNum ? "" : "<span>" + bank(it.choices[n - 1] || "") + "</span>") + "</button></li>";
-    right += '</ul><div class="verdict hidden"></div><div class="kq-tools"><button class="btn sm line" data-exp>해설 보기</button><button class="btn sm line tv-only" data-showans>정답 보기</button></div><div class="explain hidden"></div>';
+    right += '</ul><div class="verdict hidden"></div><div class="kq-tools"><button type="button" class="btn sm dark" data-grade disabled>채점하기</button><button class="btn sm line" data-exp>해설 보기</button><button class="btn sm line tv-only" data-showans>정답 보기</button></div><div class="explain hidden"></div>';
     return { two: !!left, html: left ? left + "<div>" + right + "</div>" : right };
   }
   function kqBody(it) {
@@ -651,7 +651,7 @@
     if (it.fig && it.fig.m === "ch") right += figImgs(it.fig.f, "선택지");
     right += '<ul class="choices">';
     for (var n = 1; n <= (it.basic ? it.choices.length : 5); n++) right += '<li><button type="button" data-n="' + n + '"><span class="cn">' + CIRC[n] + "</span><span>" + bank(it.choices[n - 1] != null ? it.choices[n - 1] : "") + "</span></button></li>";
-    right += '</ul><div class="verdict hidden"></div><div class="kq-tools"><button class="btn sm line" data-exp>해설 보기</button>' + '<button class="btn sm line tv-only" data-showans>정답 보기</button>' + '</div><div class="explain hidden"></div>';
+    right += '</ul><div class="verdict hidden"></div><div class="kq-tools"><button type="button" class="btn sm dark" data-grade disabled>채점하기</button><button class="btn sm line" data-exp>해설 보기</button>' + '<button class="btn sm line tv-only" data-showans>정답 보기</button>' + '</div><div class="explain hidden"></div>';
     return { two: !!left, html: left ? left + "<div>" + right + "</div>" : right };
   }
   function fillHp(code) {
@@ -720,18 +720,23 @@
     if (it.hp && d.classList.contains("hp-exam")) { it.passage = null; it.note = null; }   /* 시험지 보기에서는 지문을 위에 한 번만 */
     var r = kqBody(it);
     b.className = "kq-body" + (r.two ? " two" : ""); b.innerHTML = r.html;
-    var prev = progress.solved[it.key];
+    /* v111: 번호를 누르면 고르기만 하고, '채점하기'를 눌러야 채점된다. 지난번에 고른 답은 다시 보여 주지 않는다 */
+    var gb = b.querySelector("[data-grade]");
+    function pick(n) {
+      d._sel = n;
+      b.querySelectorAll(".choices button").forEach(function (x) { x.classList.remove("o", "x", "ans"); x.classList.toggle("sel", Number(x.dataset.n) === n); });
+      var v0 = b.querySelector(".verdict"); v0.className = "verdict hidden"; v0.textContent = "";
+      if (gb) gb.disabled = false;
+    }
     function grade(n, silent) {
       if (!silent && window.Live && Live.locked()) {   /* 수업 중 '정답 잠금': 고른 것만 표시, 공개되면 채점 */
-        d._sel = n;
-        b.querySelectorAll(".choices button").forEach(function (x) { x.classList.remove("o", "x", "ans"); x.classList.toggle("sel", Number(x.dataset.n) === n); });
-        var v0 = b.querySelector(".verdict"); v0.className = "verdict"; v0.textContent = CIRC[n] + "을(를) 골랐습니다. 선생님이 정답을 공개하면 채점됩니다.";
+        var vl = b.querySelector(".verdict"); vl.className = "verdict"; vl.textContent = CIRC[n] + "을(를) 골랐습니다. 선생님이 정답을 공개하면 채점됩니다.";
         return;
       }
-      d._sel = null;
+      d._sel = null; if (gb) gb.disabled = true;
       var ok = n === it.answer;
       b.querySelectorAll(".choices button").forEach(function (x) {
-        var k = Number(x.dataset.n); x.classList.remove("o", "x", "ans");
+        var k = Number(x.dataset.n); x.classList.remove("o", "x", "ans", "sel");
         if (k === n) x.classList.add(ok ? "o" : "x"); if (k === it.answer) x.classList.add("ans");
       });
       var v = b.querySelector(".verdict"); v.className = "verdict " + (ok ? "o" : "x");
@@ -743,8 +748,8 @@
       }
     }
     d._grade = function () { if (d._sel) grade(d._sel); };
-    if (prev) grade(prev.n, true);
-    b.querySelectorAll(".choices button").forEach(function (x) { x.onclick = function () { grade(Number(x.dataset.n)); }; });
+    b.querySelectorAll(".choices button").forEach(function (x) { x.onclick = function () { pick(Number(x.dataset.n)); }; });
+    if (gb) gb.onclick = function () { if (d._sel) grade(d._sel); };
     var sa = b.querySelector("[data-showans]"); if (sa) sa.onclick = function () { grade(it.answer, true); };
     var pt = it.hp ? null : b.querySelector("[data-pfig]");
     if (it.hp) bindPfig(b);
