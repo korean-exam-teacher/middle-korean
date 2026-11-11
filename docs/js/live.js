@@ -45,7 +45,7 @@
   if (window.MutationObserver) new MutationObserver(bustSoon).observe(document.documentElement, { childList: true, subtree: true });
   function toast(m) { var t = document.getElementById("toast"); if (!t) { t = document.createElement("div"); t.id = "toast"; t.className = "toast kt-toast"; document.body.appendChild(t); } t.textContent = m; t.classList.add("show"); clearTimeout(toast._t); toast._t = setTimeout(function () { t.classList.remove("show"); }, 2200); }
   /* v105: 수업은 선생님·관리자 아이디로 로그인했을 때만 열 수 있다(account.js 가 확인해 둔 kma.role) */
-  function canTeach() { try { var s = JSON.parse(localStorage.getItem("kma.s") || "null"), r = JSON.parse(localStorage.getItem("kma.role") || "null"); return !!(s && r && r.id === s.id && r.r); } catch (e) { return false; } }
+  function canTeach() { try { var s = JSON.parse(localStorage.getItem("kma.s") || "null"), r = JSON.parse(localStorage.getItem("kma.role") || "null"); return !!(s && r && r.id === s.id && r.r && !(r.p && r.p.live === 0)); } catch (e) { return false; } }   /* v113: 관리자가 '수업 열기'를 꺼 둔 선생님은 열 수 없다 */
   function T() { return window.Auth ? Auth.teacherView() : canTeach(); }
   function path() { return location.pathname.replace(/index\.html$/, ""); }
   function here() { return path() + (KT.keyPath ? location.hash : (location.hash || "#/")); }
@@ -60,6 +60,10 @@
     ready: null,
     init: function () {
       if (this.ready) return this.ready;
+      if (!FB) {   /* v113: 로그인에 쓰는 Firebase 앱을 함께 쓴다 — 선생님은 로그인한 계정으로 열고, 학생은 읽기만 */
+        this.ready = KMA.fbApp().then(function (app) { if (!app) throw new Error("연결하지 못했습니다."); Fire.app = app; Fire.db = app.firestore(); Fire.kma = true; });
+        return this.ready;
+      }
       var base = "https://www.gstatic.com/firebasejs/" + FB_VER + "/";
       this.ready = loadScript(base + "firebase-app-compat.js").then(function () {
         return Promise.all([loadScript(base + "firebase-auth-compat.js"), loadScript(base + "firebase-firestore-compat.js")]);
@@ -73,6 +77,7 @@
       return this.init().then(function () {
         var a = Fire.app.auth();
         if (a.currentUser) return a.currentUser.uid;
+        if (Fire.kma) throw new Error("선생님 아이디로 로그인해 주세요.");
         return a.signInAnonymously().then(function (c) { return c.user.uid; });
       });
     },
@@ -112,18 +117,26 @@
       return function () { if (bc) bc.removeEventListener("message", onMsg); window.removeEventListener("storage", onSt); };
     }
   };
-  var X = FB ? Fire : Local;
+  /* 서버로 잇는가: 따로 넣은 설정(LIVE_FIREBASE)이 있거나, 계정 서버(account.js)가 Firebase 일 때. 아니면 같은 컴퓨터 창끼리만 */
+  function SRV() { return !!(FB || (window.KMA && KMA.fb && KMA.fbApp)); }
+  var X = { create: function (c, d) { return (SRV() ? Fire : Local).create(c, d); }, update: function (c, p) { return (SRV() ? Fire : Local).update(c, p); },
+    remove: function (c) { return (SRV() ? Fire : Local).remove(c); }, watch: function (c, cb, err) { return (SRV() ? Fire : Local).watch(c, cb, err); } };
 
   /* ───────── 교사 ───────── */
   var pending = {}, timer = null;
   function push(part, now) {
     if (role !== "teacher" || !code) return;
     Object.assign(pending, part);
+    if (SRV()) {   /* 서버: 1.5초에 한 번까지만 */
+      var wait = Math.max(now ? 0 : 350, lastSent + 1500 - Date.now());
+      clearTimeout(timer); timer = setTimeout(flush, wait); return;
+    }
     clearTimeout(timer);
     timer = setTimeout(flush, now ? 0 : 350);
   }
+  var lastSent = 0;
   function flush() {
-    var p = pending; pending = {};
+    var p = pending; pending = {}; lastSent = Date.now();
     if (!Object.keys(p).length) return;
     X.update(code, p).catch(function (e) { toast("수업 화면을 보내지 못했습니다: " + e.message); });
   }
@@ -144,7 +157,8 @@
     if (!T()) { if (window.Auth && Auth.setTeacherView) Auth.setTeacherView(true); else { toast("'교사용 보기'를 켠 뒤 수업을 열 수 있습니다."); return; } }
     if (role === "teacher") { renderPanel(); return; }
     var c = newCode(), tries = 0;
-    var data = { url: here(), hash: KT.keyPath ? location.hash : (location.hash || "#/"), memo: "", lock: false, reveal: 0, kq: "", scroll: 0, res: null, follow: true, title: document.title };
+    var k0 = inkKey();
+    var data = { url: here(), hash: KT.keyPath ? location.hash : (location.hash || "#/"), memo: "", lock: false, reveal: 0, kq: "", scroll: 0, res: null, follow: true, title: document.title, ink: { h: k0, s: window.Ink ? Ink.mine(k0) : [] } };
     (function attempt() {
       X.create(c, Object.assign({}, data)).then(function () {
         role = "teacher"; code = c; doc = data; lastHash = data.url; ssSet({ role: role, code: code });
@@ -170,7 +184,7 @@
     if (role === "teacher") {
       p.className = "live-panel t no-print";
       p.innerHTML = '<div class="lp-head"><b>수업</b><span class="lp-code">' + esc(code) + '</span><button type="button" class="lp-min" data-lp="min" title="접기">–</button></div>' +
-        '<div class="lp-body">' + (FB ? "" : '<p class="lp-help warn">서버 연결 전 · 이 컴퓨터 창끼리만</p>') +
+        '<div class="lp-body">' + (SRV() ? "" : '<p class="lp-help warn">서버 연결 전 · 이 컴퓨터 창끼리만</p>') +
         '<label class="lp-ck"><input type="checkbox" data-lp="follow"' + (!doc || doc.follow !== false ? " checked" : "") + "> 학생 화면 따라오기</label>" +
         '<label class="lp-ck"><input type="checkbox" data-lp="lock"' + (doc && doc.lock ? " checked" : "") + "> 정답 잠금</label>" +
         '<div class="lp-btns"><button type="button" class="btn sm dark" data-lp="reveal">정답 공개</button><button type="button" class="btn sm line" data-lp="close">수업 닫기</button></div></div>';
@@ -223,7 +237,13 @@
       var tp = d.url.split("#")[0];
       if (tp !== path()) { if (!applying) { applying = true; location.href = fresh(d.url) || d.url; } return; }
     }
-    var go = function () { openKq(d.kq); scrollTo(d.scroll); if (window.Ink && d.ink) Ink.showTeacher(d.ink.s, d.ink.h); };
+    /* v113: 선생님이 과제 화면(덧창)을 열어 두었으면 필기 열쇠가 host:asg:<과제> — 학생 화면에도 그 과제를 띄우고, 선생님이 내린 만큼 내린다(이때 scroll 은 과제 화면의 위치) */
+    var am = /^host:asg:(.+)$/.exec((d.ink && d.ink.h) || ""), aid = am ? am[1] : "";
+    var go = function () {
+      if (window.KMA && KMA.liveAsg) KMA.liveAsg(aid, aid ? d.scroll : null);
+      if (!aid) { openKq(d.kq); scrollTo(d.scroll); }
+      if (window.Ink && d.ink) setTimeout(function () { Ink.showTeacher(d.ink.s, d.ink.h); }, aid ? 500 : 0);
+    };
     if ((d.hash || location.hash) && d.hash !== location.hash && !(!KT.keyPath && d.hash === "#/" && !location.hash)) {
       var nav = function () { applying = true; location.hash = d.hash; setTimeout(function () { applying = false; go(); }, 450); };
       var m = /^#\/res\/([^/?]+)/.exec(d.hash);
@@ -299,23 +319,28 @@
   if (app && window.MutationObserver) new MutationObserver(function () { chip(); }).observe(app, { childList: true });
 
   /* 교사 판서 → 학생 화면 */
-  if (window.Ink) Ink.onChange(function (strokes, k, final) { if (role === "teacher") push({ ink: { h: k, s: strokes } }, final); });
+  if (window.Ink) Ink.onChange(function (strokes, k, final) { if (role !== "teacher" || (!final && SRV())) return; push({ ink: { h: k, s: strokes } }, final); });
   window.Live = {
     teacherInk: function (k) { return role === "student" && doc && doc.ink && doc.ink.h === k ? doc.ink.s : []; },
     locked: function () { return role === "student" && lastLock; },
     role: function () { return role; },
+    /* v113: 과제 화면이 열리고 닫힐 때(account.js) — 필기 열쇠가 바뀌므로 그 열쇠와 필기를 바로 보낸다 */
+    asg: function (id) { if (role !== "teacher") return; var k = inkKey(); push({ ink: { h: k, s: window.Ink ? Ink.mine(k) : [] }, scroll: id ? 0 : scrollRatio() }, true); },
+    asgScroll: function (r) { if (role === "teacher") push({ scroll: r }); },
     code: function () { return code; },
     open: openSession, join: join, close: closeSession, menu: menu,
-    server: !!FB
+    server: SRV
   };
 
-  /* 새로 고침 뒤 이어 가기 */
-  var me = ssGet();
-  if (me && me.code) {
+  /* 새로 고침 뒤 이어 가기 — account.js 까지 다 읽힌 뒤에(서버로 이을지 그때 안다) */
+  function resume() {
+    var me = ssGet();
+    if (!me || !me.code) return;
     if (me.role === "teacher") {
       role = "teacher"; code = me.code;
-      X.watch(code, function (d) { if (d && role === "teacher") { var first = !doc; doc = d; if (first) { renderPanel(); if (d.url !== here()) { lastHash = ""; sendHash(); } } } else if (!d && role === "teacher") closeSession(); });
+      X.watch(code, function (d) { if (d && role === "teacher") { var first = !doc; doc = d; if (first) { renderPanel(); if (d.url !== here()) { lastHash = ""; sendHash(); } } } else if (!d && role === "teacher") closeSession(); }, function () {});
       setTimeout(chip, 0);
-    } else setTimeout(function () { join(me.code); }, 0);
+    } else join(me.code);
   }
+  if (document.readyState === "complete") setTimeout(resume, 0); else window.addEventListener("load", function () { setTimeout(resume, 0); });
 })();

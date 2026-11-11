@@ -30,7 +30,17 @@
     for (var i = 0; i < l.length; i++) { var e = l[i]; if (!e.hidden && e.getClientRects().length && e.clientWidth > 0) h = e; }
     return h;
   }
-  function pageKey() { if (host) return "host:" + host.getAttribute("data-ink-host"); return (KT.keyPath ? location.pathname.replace(/index\.html$/, "") : "") + (location.hash || "#/"); }
+  /* v113: 덧창 안에 기준 칸(data-ink-ref, 예: 가운데 문제 칸)이 있으면 그 칸의 왼쪽 위가 (0,0), 그 너비가 1000 — 화면 크기가 달라도(선생님·학생) 문제 위 같은 자리에 놓인다 */
+  function hostGeo() {
+    var hr = host.getBoundingClientRect(), sel = host.getAttribute("data-ink-ref"), ref = sel ? host.querySelector(sel) : null;
+    var L = hr.left + host.clientLeft, T = hr.top + host.clientTop, g = { L: L, T: T, hw: host.clientWidth || 1, hh: host.clientHeight };
+    if (ref) { var rr = ref.getBoundingClientRect(); g.ox = rr.left; g.oy = rr.top; g.w = rr.width || 1; }
+    else { g.ox = L - host.scrollLeft; g.oy = T - host.scrollTop; g.w = g.hw; }
+    g.vb = ((L - g.ox) / g.w * 1000) + " " + ((T - g.oy) / g.w * 1000) + " " + (g.hw / g.w * 1000) + " " + (g.hh / g.w * 1000);
+    return g;
+  }
+  function baseKey() { return (KT.keyPath ? location.pathname.replace(/index\.html$/, "") : "") + (location.hash || "#/"); }
+  function pageKey() { return host ? "host:" + host.getAttribute("data-ink-host") : baseKey(); }
   function lsGet(k) { try { return JSON.parse(localStorage.getItem(LSK + k) || "[]"); } catch (e) { return []; } }
   function lsSet(k, v) { try { if (v.length) localStorage.setItem(LSK + k, JSON.stringify(v)); else localStorage.removeItem(LSK + k); } catch (e) {} }
   var NS = "http://www.w3.org/2000/svg";
@@ -82,11 +92,11 @@
     }
     main = m; svg.style.display = "";
     if (host) {   /* 덧창: 덧창이 보이는 칸에 붙박아 두고, 스크롤한 만큼 그림을 옮긴다 */
-      var hr = host.getBoundingClientRect(), hw = host.clientWidth || 1, hh = host.clientHeight, z = parseInt(getComputedStyle(host).zIndex, 10) || 0;
+      var g = hostGeo(), z = parseInt(getComputedStyle(host).zIndex, 10) || 0;
       svg.classList.add("ink-fixed");
-      svg.style.left = (hr.left + host.clientLeft) + "px"; svg.style.top = (hr.top + host.clientTop) + "px"; svg.style.width = hw + "px"; svg.style.height = hh + "px";
+      svg.style.left = g.L + "px"; svg.style.top = g.T + "px"; svg.style.width = g.hw + "px"; svg.style.height = g.hh + "px";
       svg.style.zIndex = z + 1; if (bar) { bar.style.zIndex = z + 3; bar.style.bottom = (host.getAttribute("data-ink-bottom") || 16) + "px"; } if (live) live.style.zIndex = z + 2;
-      svg.setAttribute("viewBox", (host.scrollLeft / hw * 1000) + " " + (host.scrollTop / hw * 1000) + " 1000 " + (hh / hw * 1000));
+      svg.setAttribute("viewBox", g.vb);
       return true;
     }
     svg.classList.remove("ink-fixed"); svg.style.zIndex = ""; if (bar) { bar.style.zIndex = ""; bar.style.bottom = ""; } if (live) live.style.zIndex = "";
@@ -100,7 +110,7 @@
     return true;
   }
   function pt(e) {
-    if (host) { var hr = host.getBoundingClientRect(), hw = host.clientWidth || 1; return [Math.round((e.clientX - hr.left - host.clientLeft + host.scrollLeft) / hw * 1000), Math.round((e.clientY - hr.top - host.clientTop + host.scrollTop) / hw * 1000)]; }
+    if (host) { var g = hostGeo(); return [Math.round((e.clientX - g.ox) / g.w * 1000), Math.round((e.clientY - g.oy) / g.w * 1000)]; }
     var r = main.getBoundingClientRect(), w = r.width;
     if (main === document.body) { r = { left: -scrollX, top: -scrollY }; w = document.documentElement.clientWidth; }
     return [Math.round((e.clientX - r.left) / w * 1000), Math.round((e.clientY - r.top) / w * 1000)];
@@ -168,7 +178,7 @@
     return changed;
   }
   var penAt = 0, penSeen = false, activeId = null;
-  function W() { return host ? (host.clientWidth || 1) : main === document.body ? document.documentElement.clientWidth : main.getBoundingClientRect().width; }
+  function W() { return host ? hostGeo().w : main === document.body ? document.documentElement.clientWidth : main.getBoundingClientRect().width; }
   /* 지금 긋는 획: 화면 좌표(cl)로 캔버스에 그린다. 예측 점(pr)은 꼬리로만 붙이고 저장하지 않는다 */
   function paintLive(cl, pr, c) {
     if (!lctx) return;
@@ -306,7 +316,7 @@
     if (hs !== host || pageKey() !== key || h !== lastH) { lastH = h; check(); }
   }, 400);
   /* 덧창을 스크롤하면 필기도 함께 움직인다 */
-  document.addEventListener("scroll", function (e) { if (host && e.target === host && svg) svg.setAttribute("viewBox", (host.scrollLeft / (host.clientWidth || 1) * 1000) + " " + (host.scrollTop / (host.clientWidth || 1) * 1000) + " 1000 " + (host.clientHeight / (host.clientWidth || 1) * 1000)); }, true);
+  document.addEventListener("scroll", function (e) { if (host && e.target === host && svg) svg.setAttribute("viewBox", hostGeo().vb); }, true);
   window.addEventListener("resize", function () { redraw(); fitLive(); });
   setTimeout(function () { check(); renderBar(); }, 0);
 
@@ -316,7 +326,7 @@
     mine: function (k) { return k === key ? mine.slice() : lsGet(k); },
     /* 학생: 교사 판서 보이기 */
     showTeacher: function (strokes, k) { teacher = (k && k !== pageKey()) ? [] : (strokes || []); if (ensure()) draw(gT, teacher); },
-    key: pageKey,
+    key: function () { var h = findHost(); return h ? "host:" + h.getAttribute("data-ink-host") : baseKey(); },   /* 덧창이 막 열리고 닫힌 때에도 맞는 열쇠 */
     refreshBar: function () { if (bar) renderBar(); }
   };
 })();
