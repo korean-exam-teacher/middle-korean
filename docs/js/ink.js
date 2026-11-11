@@ -11,6 +11,7 @@
  *   - getCoalescedEvents(사이 점까지)·getPredictedEvents(앞질러 그리기)로 펜 끝을 바짝 따라간다.
  *   - 펜·손가락·마우스 모두 쓴다. 펜이 닿아 있거나 막 뗀 때(0.6초)만 손바닥(터치)을 무시하고, 펜을 쓰는 기기에서는 손가락으로 끌면 화면이 내려간다.
  *   - iPad: 길게 누름·확대경·글자 고르기를 막는다(touchstart 막기, user-select 끔).
+ * v115: 수업에서 선생님이 긋는 중인 획도 바로 보이게 — 획마다 이름표(i, 만든 순서대로 늘어남)를 달고, 긋는 중인 획은 따로 알린다(onChange 넷째 값, showCur)
  * v114: 필기를 그 아래 있는 것에 붙여 둔다(획마다 a = 붙인 곳의 열쇠)
  *   - 획을 긋기 시작한 자리 아래의 문항 그림·문항 칸·문단을 찾아, 좌표를 그것의 왼쪽 위·너비(=1000) 기준으로 적는다.
  *   - 화면 크기가 다르거나(선생님 큰 화면 · 학생 태블릿) 위쪽 내용의 높이가 달라도 그 그림·칸 위 같은 자리에 나타난다. 접어서 안 보이면 필기도 숨는다.
@@ -87,8 +88,8 @@
     if (!m) { if (svg) svg.style.display = "none"; return false; }
     if (!svg) {
       svg = document.createElementNS(NS, "svg"); svg.setAttribute("class", "ink-layer no-print"); svg.setAttribute("aria-hidden", "true");
-      gT = document.createElementNS(NS, "g"); gM = document.createElementNS(NS, "g");
-      svg.appendChild(gT); svg.appendChild(gM); document.body.appendChild(svg);
+      gT = document.createElementNS(NS, "g"); gC = document.createElementNS(NS, "g"); gM = document.createElementNS(NS, "g");
+      svg.appendChild(gT); svg.appendChild(gC); svg.appendChild(gM); document.body.appendChild(svg);
       svg.addEventListener("pointerdown", down);
       /* iPad: 펜·손가락이 닿자마자 확대경·글자 고르기·길게 누름 메뉴가 뜨지 않게 */
       ["touchstart", "touchmove"].forEach(function (t) { svg.addEventListener(t, function (e) { if (on) e.preventDefault(); }, { passive: false }); });
@@ -163,7 +164,7 @@
   function placeAll() {
     if (!svg || !main) return;
     var b = null, cache = {};
-    [gT, gM].forEach(function (g) {
+    [gT, gC, gM].forEach(function (g) {
       for (var n = g.firstChild; n; n = n.nextSibling) {
         var st = n._s; if (!st || !st.a) continue;
         if (!b) b = baseGeo();
@@ -192,7 +193,11 @@
   }
   function draw(g, list) { while (g.firstChild) g.removeChild(g.firstChild); list.forEach(function (s) { g.appendChild(el(s)); }); placeAll(); }
   function redraw() { if (!ensure()) return; draw(gT, teacher); draw(gM, mine); }   /* 긋는 중인 획은 캔버스(ink-live)에 있다 */
-  function emit(final) { listeners.forEach(function (f) { try { f(cur ? mine.concat([cur]) : mine, key, final); } catch (e) { console.error(e); } }); }
+  var gC = null, ridN = 0;
+  function rid() { return Date.now().toString(36) + (ridN++ % 1296).toString(36); }   /* 획 이름표: 만든 순서대로 늘어난다 */
+  function tagAll(l) { l.forEach(function (x) { if (!x.i) x.i = rid(); }); return l; }
+  /* 듣는 쪽(live.js)에: (끝난 획들, 화면 열쇠, 손을 뗐는가, 긋는 중인 획) */
+  function emit(final) { listeners.forEach(function (f) { try { f(mine, key, final, cur); } catch (e) { console.error(e); } }); }
 
   var sendT = 0, tool = "pen", hist = [];
   var ER = { stroke: 14, part: 12 };   /* 지우개 반지름(본문 너비 1000 기준) */
@@ -237,7 +242,7 @@
       if (!q || !hits(s, q[0], q[1], ER.part, q[2])) { out.push(s); return; }
       changed = true;
       var x = q[0], y = q[1], p = densify(s.p, 3 / q[2]), run = [], r = (ER.part + (s.c === "hl" ? 8 : 2)) / q[2];
-      var keep = function () { if (run.length >= 4) { var o = { c: s.c, p: run }; if (s.a) o.a = s.a; out.push(o); } run = []; };
+      var keep = function () { if (run.length >= 4) { var o = { c: s.c, p: run, i: rid() }; if (s.a) o.a = s.a; out.push(o); } run = []; };
       for (var i = 0; i < p.length; i += 2) { if (Math.hypot(p[i] - x, p[i + 1] - y) <= r) keep(); else run.push(p[i], p[i + 1]); }
       keep();
     });
@@ -325,7 +330,7 @@
       var pr = [], pl = ev.getPredictedEvents ? ev.getPredictedEvents() : [];
       for (var t = 0; t < pl.length && t < 2; t++) pr.push(pl[t].clientX, pl[t].clientY);
       paintLive(cl, pr, cur.c);
-      var now = Date.now(); if (now - sendT > 250) { sendT = now; emit(false); }
+      var now = Date.now(); if (now - sendT > 50) { sendT = now; emit(false); }   /* 긋는 중: 0.05초마다 알림(보내는 쪽에서 다시 걸러 보냄) */
     };
     var up = function (ev) {
       if (ev.pointerId !== activeId) return;
@@ -335,7 +340,7 @@
       if (erasing) { if (raf) { cancelAnimationFrame(raf); raf = 0; draw(gM, mine); } if (changed) { setTimeout(function () { lsSet(key, mine); }, 0); emit(true); } else hist.pop(); return; }
       if (cur && !far && Date.now() - t0 < 300 && ev.type === "pointerup" && tapThrough(ev.clientX, ev.clientY)) { cur = null; clearLive(); hist.pop(); return; }
       if (cur) {
-        var s0 = cur; mine.push(s0); cur = null;
+        var s0 = cur; s0.i = rid(); mine.push(s0); cur = null;
         if (ensure()) { gM.appendChild(el(s0)); placeAll(); }   /* 그 획 하나만 붙인다 */
         clearLive();
         setTimeout(function () { lsSet(key, mine); }, 0); emit(true);
@@ -377,7 +382,7 @@
   function check() {
     host = findHost();
     var k = pageKey();
-    if (k !== key) { key = k; mine = lsGet(k); hist = []; teacher = window.Live && Live.teacherInk ? Live.teacherInk(k) : []; cur = null; }
+    if (k !== key) { key = k; mine = tagAll(lsGet(k)); hist = []; teacher = window.Live && Live.teacherInk ? Live.teacherInk(k) : []; cur = null; }
     redraw();
   }
   var lastH = 0;
@@ -396,9 +401,16 @@
   window.Ink = {
     /* 교사: 내 판서가 바뀔 때 (strokes, 화면 키, 끝났는지) */
     onChange: function (f) { listeners.push(f); },
-    mine: function (k) { return k === key ? mine.slice() : lsGet(k); },
+    mine: function (k) { return k === key ? mine.slice() : tagAll(lsGet(k)); },
     /* 학생: 교사 판서 보이기 */
     showTeacher: function (strokes, k) { teacher = (k && k !== pageKey()) ? [] : (strokes || []); if (ensure()) draw(gT, teacher); },
+    /* 학생: 선생님이 지금 긋고 있는 획 하나(없으면 지움) */
+    showCur: function (st, k) {
+      if (!gC && !ensure()) return;
+      while (gC.firstChild) gC.removeChild(gC.firstChild);
+      if (!st || !st.p || st.p.length < 2 || (k && k !== pageKey())) return;
+      gC.appendChild(el(st)); placeAll();
+    },
     key: function () { var h = findHost(); return h ? "host:" + h.getAttribute("data-ink-host") : baseKey(); },   /* 덧창이 막 열리고 닫힌 때에도 맞는 열쇠 */
     refreshBar: function () { if (bar) renderBar(); }
   };
