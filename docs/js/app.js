@@ -132,7 +132,8 @@
     if (T()) { nav.push(["share", "#/share", V89 ? "활동" : "내 활동 자료"]); nav.push(["teacher", "#/teacher", V89 ? "자료실" : "교사 자료실"]); }
     else nav.push(["my", "#/my", "내 학습"]);
     return '<header class="gnb"><div class="inner">' +
-      '<a class="logo" href="#/" aria-label="1단계 개념 학습 처음 화면"><span class="logo-text"><span class="logo-old" lang="okm">불휘 기픈 남ᄀᆞᆫ</span>' + (V89 ? "" : '<span class="logo-sub">개념 학습</span><span class="logo-gloss">뿌리 깊은 나무는</span>') + "</span></a>" +
+      (V89 ? '<div class="logo"><span class="crumb"><a class="logo-old" href="/suneung-korean/">국어의 모든 것</a><i aria-hidden="true">›</i><a class="logo-old here" lang="okm" href="#/" aria-current="page" title="개념 학습 · 뿌리 깊은 나무는">불휘 기픈 남ᄀᆞᆫ</a></span></div>' :
+      '<a class="logo" href="#/" aria-label="1단계 개념 학습 처음 화면"><span class="logo-text"><span class="logo-old" lang="okm">불휘 기픈 남ᄀᆞᆫ</span><span class="logo-sub">개념 학습</span><span class="logo-gloss">뿌리 깊은 나무는</span></span></a>') +
       '<nav class="gnb-nav" aria-label="주 메뉴">' + nav.map(function (n) { return '<a class="gnb-link' + (active === n[0] ? " active" : "") + '" href="' + n[1] + '">' + n[2] + "</a>"; }).join("") +
       '<a class="gnb-link sub" href="/suneung-korean/">' + (V89 ? "전체" : "처음 화면") + "</a></nav>" +
       '<div class="gnb-tools"><span id="live-slot"></span>' + (Auth.canTeach && !Auth.canTeach() ? "" : '<label class="tv-sw" title="교사용 내용 보기 — 선생님 아이디로 로그인했을 때만 보여요"><input type="checkbox" data-act="tv"' + (T() ? " checked" : "") + '><span>' + (V89 ? "교사" : "교사용 보기") + "</span></label>") + "</div>" +
