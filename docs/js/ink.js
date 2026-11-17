@@ -11,6 +11,12 @@
  *   - getCoalescedEvents(사이 점까지)·getPredictedEvents(앞질러 그리기)로 펜 끝을 바짝 따라간다.
  *   - 펜·손가락·마우스 모두 쓴다. 펜이 닿아 있거나 막 뗀 때(0.6초)만 손바닥(터치)을 무시하고, 펜을 쓰는 기기에서는 손가락으로 끌면 화면이 내려간다.
  *   - iPad: 길게 누름·확대경·글자 고르기를 막는다(touchstart 막기, user-select 끔).
+ * v124: 필기 단추·가려지는 필기
+ *   - 꺼져 있을 때는 왼쪽 아래 동그란 단추 하나. 켜면 그 자리에서 옆으로 도구가 펼쳐진다(좁은 화면에서는 위로 한 줄 더).
+ *   - 화면을 손가락으로 확대해도(핀치) 단추는 지금 보이는 화면의 왼쪽 아래에 같은 크기로 있다(visualViewport).
+ *   - 필기 층을 붙박이 머리·띠보다 아래에 둔다(층 번호 4, 낮은 머리·띠는 5로 올림). 지문이 머리 뒤로 올라가 숨으면 그 위의 필기도 숨는다.
+ *     (전에는 머리 위에도 쓸 수 있게 54였다 — 이제 붙박이 머리·띠 위에는 쓰지 않는다.)
+ *   - 스스로 스크롤하는 칸(지문과 함께 보기의 지문 칸 등) 안에 붙인 필기는 그 칸 밖으로 나간 만큼 잘라 낸다(붙인 곳마다 clipPath 하나).
  * v121: 덧창(과제 풀기·모아 풀기 등)에서 화면을 내리면 필기가 제자리에 남거나 늦게 따라오던 것을 고침
  *   - 전에는 필기 층을 화면에 붙박아 두고(position:fixed) 스크롤 알림이 올 때마다 그림을 옮겼다. 휴대폰은 화면을 먼저 내리고 알림을 늦게 줘서 필기가 남아 보였다.
  *   - 이제 필기 층을 덧창 안에 넣어(내용 전체 크기) 내용과 한 몸으로 움직인다. 덧창이 내용을 새로 그리며 필기 층을 지우면 바로 다시 넣는다(MutationObserver).
@@ -79,14 +85,18 @@
     st.textContent = ".ink-live{position:fixed;left:0;top:0;z-index:26;pointer-events:none}" +
       "body.ink-on{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}" +
       "body.ink-on .ink-layer{pointer-events:auto;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}" +
-      "svg.ink-layer{z-index:54}" +   /* 붙박이 머리(메뉴) 위에도 쓸 수 있게 */
+      "svg.ink-layer{z-index:4}" +   /* v124: 본문 위, 붙박이 머리·띠 아래 — 지문이 머리 뒤로 올라가 숨으면 그 위에 쓴 필기도 함께 숨는다(전에는 54라 머리 위에 필기만 남아 보였다) */
       ".ink-layer.ink-fixed{position:fixed!important}" +
       ".ink-layer.ink-in{position:absolute!important;margin:0!important;max-width:none!important;max-height:none!important}" +
       "body.ink-on.ink-hand .ink-layer{pointer-events:none!important}body.ink-on.ink-hand{-webkit-user-select:auto;user-select:auto;-webkit-touch-callout:default}" +
       ".ink-bar .ink-hand{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;padding:0;border-radius:50%}.ink-bar .ink-hand.sel{background:#2F4F7F;color:#fff}" +
-      ".ink-bar{max-width:calc(100vw - 16px);flex-wrap:wrap}" +
-      ".ink-bar .ink-pen{width:auto!important;min-width:36px;padding:0 14px 0 11px!important;border-radius:999px!important;display:inline-flex;align-items:center;gap:5px;font-size:14px!important;height:36px}" +
-      ".ink-bar .ink-pen i{font-style:normal;font-size:17px;line-height:1}" +
+      ".ink-bar{max-width:calc(100vw - 32px);flex-wrap:wrap-reverse;border-radius:26px!important}" +
+      /* v124: 꺼져 있을 때는 동그란 단추 하나. 켜면 그 자리에서 옆으로 도구가 펼쳐진다(단추 가운데 자리는 그대로) */
+      ".ink-bar:not(.on){background:none!important;border-color:transparent!important;box-shadow:none!important;padding:0!important;gap:8px}" +
+      ".ink-bar .ink-pen{width:46px!important;height:46px!important;min-width:46px;padding:0!important;border-radius:50%!important;display:inline-flex;align-items:center;justify-content:center;background:#fff;border:1px solid #DCDCD7!important;box-shadow:0 4px 16px rgba(40,40,38,.12);color:#3A3A37!important}" +
+      ".ink-bar.on .ink-pen{width:36px!important;height:36px!important;min-width:36px;background:#2F4F7F;border-color:#2F4F7F!important;box-shadow:none;color:#fff!important}" +
+      ".ink-bar:not(.on) .ink-class{background:rgba(255,255,255,.94);box-shadow:0 4px 16px rgba(40,40,38,.08)}" +
+      ".ink-bar.ink-pin{left:0!important;top:0!important;right:auto!important;bottom:auto!important;transform-origin:0 0;will-change:transform}" +
       "@media print{.ink-live{display:none!important}}";
     document.head.appendChild(st);
   })();
@@ -200,16 +210,44 @@
     if (main === document.body) return { ox: -scrollX, oy: -scrollY, w: document.documentElement.clientWidth || 1 };
     var r = main.getBoundingClientRect(); return { ox: r.left, oy: r.top, w: r.width || 1 };
   }
+  /* v124: 붙인 곳이 스스로 스크롤하는 칸(모아 풀기의 지문 칸 등) 안에 있으면 그 칸의 보이는 네모 [왼, 위, 오른, 아래](화면 좌표). 없으면 null */
+  function clipBox(e) {
+    var sc = scopeEl(), box = null, p, cs, r, l, t, q;
+    for (p = e.parentElement; p && p !== sc && p !== document.body && p !== document.documentElement; p = p.parentElement) {
+      if (p.scrollHeight <= p.clientHeight + 1 && p.scrollWidth <= p.clientWidth + 1) continue;   /* 넘치지 않는 칸은 볼 것 없다 */
+      cs = getComputedStyle(p); if (cs.overflowY === "visible" && cs.overflowX === "visible") continue;
+      r = p.getBoundingClientRect(); l = r.left + p.clientLeft; t = r.top + p.clientTop;
+      q = [cs.overflowX === "visible" ? -1e6 : l, cs.overflowY === "visible" ? -1e6 : t, cs.overflowX === "visible" ? 1e6 : l + p.clientWidth, cs.overflowY === "visible" ? 1e6 : t + p.clientHeight];
+      box = box ? [Math.max(box[0], q[0]), Math.max(box[1], q[1]), Math.min(box[2], q[2]), Math.min(box[3], q[3])] : q;
+    }
+    return box;
+  }
+  var cpIds = {}, cpN = 0, cpDefs = null;
+  function clipRect(akey) {   /* 붙인 곳마다 자르는 틀 하나(<clipPath><rect>) */
+    if (!cpDefs || cpDefs.parentNode !== svg) { cpDefs = document.createElementNS(NS, "defs"); svg.insertBefore(cpDefs, svg.firstChild); cpIds = {}; }
+    var c = cpIds[akey];
+    if (!c) { var cp = document.createElementNS(NS, "clipPath"), rc = document.createElementNS(NS, "rect"); cp.setAttribute("id", "inkcp" + (++cpN)); cp.setAttribute("clipPathUnits", "userSpaceOnUse"); cp.appendChild(rc); cpDefs.appendChild(cp); c = cpIds[akey] = { id: "inkcp" + cpN, rc: rc, v: "" }; }
+    return c;
+  }
   /* 붙여 둔 획들을 지금 그것이 있는 자리로 옮긴다(배치가 바뀔 때마다) */
   function placeAll() {
     if (!svg || !main) return;
-    var b = null, cache = {};
+    var b = null, cache = {}, boxes = {};
     [gT, gC, gM].forEach(function (g) {
       for (var n = g.firstChild; n; n = n.nextSibling) {
         var st = n._s; if (!st || !st.a) continue;
         if (!b) b = baseGeo();
         var e = findAnchor(st.a, cache), r = e ? e.getBoundingClientRect() : null;
         if (!r || r.width < 2) { if (n.style.display !== "none") n.style.display = "none"; continue; }
+        /* v124: 스스로 스크롤하는 칸 밖으로 나간 부분은 보이지 않게 */
+        var cb = st.a in boxes ? boxes[st.a] : (boxes[st.a] = clipBox(e)), want = "";
+        if (cb && (r.left < cb[0] - 1 || r.top < cb[1] - 1 || r.right > cb[2] + 1 || r.bottom > cb[3] + 1)) {
+          if (cb[2] <= cb[0] || cb[3] <= cb[1] || r.right <= cb[0] || r.left >= cb[2] || r.bottom <= cb[1] || r.top >= cb[3]) { if (n.style.display !== "none") n.style.display = "none"; continue; }   /* 통째로 칸 밖 */
+          var c = clipRect(st.a), u = 1000 / r.width, v = [((Math.max(cb[0], r.left - 400) - r.left) * u).toFixed(1), ((Math.max(cb[1], r.top - 400) - r.top) * u).toFixed(1), ((Math.min(cb[2], r.right + 400) - Math.max(cb[0], r.left - 400)) * u).toFixed(1), ((Math.min(cb[3], r.bottom + 400) - Math.max(cb[1], r.top - 400)) * u).toFixed(1)].join(" ");
+          if (c.v !== v) { c.v = v; var vs = v.split(" "); c.rc.setAttribute("x", vs[0]); c.rc.setAttribute("y", vs[1]); c.rc.setAttribute("width", vs[2]); c.rc.setAttribute("height", vs[3]); }
+          want = "url(#" + c.id + ")";
+        }
+        if ((n._cp || "") !== want) { n._cp = want; if (want) n.setAttribute("clip-path", want); else n.removeAttribute("clip-path"); }
         var k = r.width / b.w, tf = "translate(" + ((r.left - b.ox) / b.w * 1000).toFixed(2) + " " + ((r.top - b.oy) / b.w * 1000).toFixed(2) + ") scale(" + k.toFixed(5) + ")";
         if (n._tf !== tf) { n._tf = tf; n.setAttribute("transform", tf); n.setAttribute("stroke-width", ((st.c === "hl" ? 16 : 3.2) / k).toFixed(2)); }
         if (n.style.display === "none") n.style.display = "";
@@ -398,15 +436,32 @@
   var IC_S = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 18c3-6 6-10 9-10s1 6 4 6 2-3 3-4"/><path d="M3 21h18" opacity=".45"/></svg>';
   var IC_H = '<svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11V4.5a1.5 1.5 0 0 1 3 0V10"/><path d="M12 10V8.5a1.5 1.5 0 0 1 3 0V11"/><path d="M15 11v-1a1.5 1.5 0 0 1 3 0v4.5c0 3.6-2.4 6-6 6h-.5c-2 0-3.3-.8-4.4-2.3L4.3 14.3a1.5 1.5 0 0 1 2.3-1.9L9 14.5"/></svg>';
   var IC_P = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4l5 5-9 9H6v-5z"/><path d="M6 18h14" opacity=".45"/></svg>';
+  var IC_PEN = '<svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20l1.2-4.4L16.6 4.2a2 2 0 0 1 2.8 0l.4.4a2 2 0 0 1 0 2.8L8.4 18.8z"/><path d="M14.5 6.3l3.2 3.2"/></svg>';
+  /* v124: 화면을 손가락으로 확대하면(핀치) 붙박이 단추는 '확대하기 전 화면'의 왼쪽 아래에 남아 보이지 않게 된다.
+     → 확대된 동안에는 지금 보이는 화면(visualViewport)의 왼쪽 아래로 옮기고, 크기도 확대한 만큼 줄여 늘 같은 크기로 보이게 한다. */
+  var vv = window.visualViewport, pinRaf = 0;
+  function pin() {
+    if (!bar) return;
+    var s = vv ? vv.scale : 1;
+    if (!vv || s < 1.02) { if (bar.classList.contains("ink-pin")) { bar.classList.remove("ink-pin"); bar.style.transform = ""; } return; }
+    bar.classList.add("ink-pin");
+    var m = 16 / s, h = bar.offsetHeight / s, base = parseFloat(bar.style.bottom) || 16, yb = vv.offsetTop + vv.height - m;
+    if (base > 16) yb = Math.min(yb, Math.max(document.documentElement.clientHeight, Math.round(vv.height * s)) - base);   /* 과제 화면 아래 띠(제출하기) 위로 */
+    bar.style.transform = "translate(" + (vv.offsetLeft + m) + "px," + (yb - h) + "px) scale(" + (1 / s) + ")";
+  }
+  function pinSoon() { if (!pinRaf) pinRaf = requestAnimationFrame(function () { pinRaf = 0; pin(); }); }
+  if (vv) { vv.addEventListener("resize", pinSoon); vv.addEventListener("scroll", pinSoon); }
+  window.addEventListener("scroll", pinSoon, { passive: true });
   function renderBar() {
     if (!bar) { bar = document.createElement("div"); bar.className = "ink-bar no-print"; document.body.appendChild(bar); }
     bar.classList.toggle("on", on);
-    bar.innerHTML = (KT.classBtn ? '<button type="button" class="ink-class" data-ink="class" title="수업 열기·참여">' + (window.Live && Live.code() ? "수업 " + Live.code() : "수업") + "</button>" : "") +
-      '<button type="button" class="ink-pen" data-ink="toggle" title="' + (on ? "필기 끄기" : "필기 — 화면 위에 펜으로 쓰기") + '" aria-pressed="' + on + '"><i>✎</i>' + (on ? "끄기" : "필기") + "</button>" +
+    bar.innerHTML = '<button type="button" class="ink-pen" data-ink="toggle" title="' + (on ? "필기 끄기" : "필기 — 화면 위에 펜으로 쓰기") + '" aria-label="' + (on ? "필기 끄기" : "필기") + '" aria-pressed="' + on + '">' + IC_PEN + "</button>" +
       (on ? '<button type="button" class="ink-hand' + (tool === "hand" ? " sel" : "") + '" data-ink="hand" aria-pressed="' + (tool === "hand") + '" title="손가락 — 필기는 그대로 두고 화면을 누르고 옮기기 (다시 누르면 펜)">' + IC_H + '</button>' + COLORS.map(function (c) { return '<button type="button" class="ink-c' + (tool === "pen" && c[0] === color ? " sel" : "") + '" data-ink-c="' + c[0] + '" title="' + c[1] + '" style="--c:' + (c[0] === "hl" ? "#F2D65C" : c[0]) + '"></button>'; }).join("") +
         '<span class="ink-sep"></span><button type="button" class="ink-t ink-e' + (tool === "serase" ? " sel" : "") + '" data-ink="serase" title="획 지우개 — 닿은 획을 통째로">' + IC_S + '</button>' +
         '<button type="button" class="ink-t ink-e' + (tool === "perase" ? " sel" : "") + '" data-ink="perase" title="부분 지우개 — 닿은 부분만">' + IC_P + "</button>" +
-        '<span class="ink-sep"></span><button type="button" class="ink-t" data-ink="undo" title="되돌리기">↶</button><button type="button" class="ink-t" data-ink="clear" title="모두 지우기">모두 지우기</button>' : "");
+        '<span class="ink-sep"></span><button type="button" class="ink-t" data-ink="undo" title="되돌리기">↶</button><button type="button" class="ink-t" data-ink="clear" title="모두 지우기">모두 지우기</button>' : "") +
+      (KT.classBtn ? '<button type="button" class="ink-class" data-ink="class" title="수업 열기·참여">' + (window.Live && Live.code() ? "수업 " + Live.code() : "수업") + "</button>" : "");
+    pin();
     if (svg) svg.setAttribute("data-tool", tool);
     document.body.classList.toggle("ink-hand", on && tool === "hand");
   }
@@ -423,11 +478,25 @@
   });
   document.addEventListener("keydown", function (e) { if (e.key === "Escape" && on) setOn(false); });
 
+  /* v124: 붙박이(sticky·fixed) 머리·띠 가운데 층 번호가 필기 층(4)보다 낮은 것은 5로 올린다 → 필기를 가린다.
+     이름으로 후보를 고른 뒤(머리·띠·메뉴 같은 이름) 실제로 붙박이인 것만 건드린다. 한 번 본 것은 다시 보지 않는다. */
+  var BARSEL = "header,nav,footer,.top,.foot,.gnb,[class*='bar'],[class*='foot'],[class*='sticky'],[class*='head'],[class*='gnb']";
+  function liftBars() {
+    var sc = scopeEl(), l, i, e, cs;
+    try { l = sc.querySelectorAll(BARSEL); } catch (x) { return; }
+    for (i = 0; i < l.length; i++) {
+      e = l[i]; if (e._inkZ) continue; e._inkZ = 1;
+      if (e === bar || e === svg || e === live || (bar && bar.contains(e))) continue;
+      cs = getComputedStyle(e); if (cs.position !== "sticky" && cs.position !== "fixed") continue;
+      if (cs.zIndex === "auto" || +cs.zIndex < 5) e.style.zIndex = "5";
+    }
+  }
   /* 화면이 바뀌면 그 화면의 판서를 불러오고, 크기가 바뀌면 다시 맞춘다 */
   function check() {
     host = findHost();
     var k = pageKey();
     if (k !== key) { key = k; mine = tagAll(lsGet(k)); hist = []; teacher = window.Live && Live.teacherInk ? Live.teacherInk(k) : []; cur = null; }
+    liftBars();
     redraw();
   }
   var lastH = 0;
