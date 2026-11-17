@@ -10,6 +10,8 @@
  *   보안 규칙은 firestore.rules (live/{코드} 문서만 쓰고, 고치기·지우기는 연 교사만).
  * - 없으면: 같은 컴퓨터·같은 브라우저의 다른 창끼리만 연결(화면 확인용).
  *
+ * v125: 화면 맞추기를 '같은 글·그림이 같은 높이에' 오게(d.sa = Ink.viewAnchor()) — 전에는 전체 길이의 몇 %로 맞춰, 화면 크기·글 높이가 다르면 다른 곳이 보였다.
+ *   학생 화면 잠그기(d.hold) · 주목(d.att): 선생님 수업 창의 체크 둘. 잠그면 학생은 넘기기·누르기·나가기가 안 되고 선생님 화면만 따라간다.
  * v91: 다른 갈래(수능·논술·곶·서논술·첫 화면)에서도 쓴다. 판서 도구의 '수업' 단추로 열고 참여한다(Live.menu).
  *   교사가 다른 갈래로 옮겨 가면 학생 화면도 그 주소로 따라간다(doc.url = 경로 + #).
  */
@@ -198,7 +200,7 @@
       var o = Object.assign({}, d), ink = d.ink || {}, sm = ink.s || {};
       if (typeof o.res === "string") { try { o.res = JSON.parse(o.res); } catch (e) { o.res = null; } } else o.res = null;
       o.ink = { h: ink.h || "", s: Object.keys(sm).sort().map(function (id) { var x = sm[id] || {}, st = { c: x.c, i: id, p: String(x.p || "").split(",").map(Number) }; if (x.a) st.a = x.a; return st; }) };
-      o.memo = o.memo || ""; o.kq = o.kq || ""; o.lock = !!o.lock; o.reveal = o.reveal || 0; o.scroll = o.scroll || 0;
+      o.memo = o.memo || ""; o.kq = o.kq || ""; o.lock = !!o.lock; o.reveal = o.reveal || 0; o.scroll = o.scroll || 0; o.hold = !!o.hold; o.att = !!o.att; o.sa = o.sa || null;
       return o;
     },
     watch: function (c, cb, err) {
@@ -240,6 +242,8 @@
     if (!Object.keys(p).length) return;
     X.update(code, p).catch(function (e) { toast("수업 화면을 보내지 못했습니다: " + e.message); });
   }
+  /* v125: 화면 맞추기 기준 — 선생님 화면의 한 점 아래 있는 글·그림(ink.js Ink.viewAnchor). 학생 화면은 그것을 같은 높이에 오게 한다 */
+  function SA() { try { return window.Ink && Ink.viewAnchor ? Ink.viewAnchor() : null; } catch (e) { return null; } }
   function scrollRatio() { var h = document.documentElement.scrollHeight - innerHeight; return h > 0 ? Math.round(scrollY / h * 1000) / 1000 : 0; }
   function resPayload(hash) {
     var m = /^#\/res\/([^/?]+)/.exec(hash || "");
@@ -250,7 +254,7 @@
     var u = here(), h = KT.keyPath ? location.hash : (location.hash || "#/");
     if (u === lastHash) return; lastHash = u;
     var k = inkKey();
-    resPayload(h).then(function (res) { push({ url: u, hash: h, kq: "", scroll: 0, res: res, vw: document.documentElement.clientWidth, ink: { h: k, s: window.Ink ? Ink.mine(k) : [] } }); });
+    resPayload(h).then(function (res) { push({ url: u, hash: h, kq: "", scroll: 0, sa: null, res: res, vw: document.documentElement.clientWidth, ink: { h: k, s: window.Ink ? Ink.mine(k) : [] } }); });
   }
   function openSession() {
     if (!canTeach()) { toast("수업은 선생님 아이디로 로그인해야 열 수 있어요."); return; }
@@ -258,7 +262,7 @@
     if (role === "teacher") { renderPanel(); return; }
     var c = newCode(), tries = 0;
     var k0 = inkKey();
-    var data = { url: here(), hash: KT.keyPath ? location.hash : (location.hash || "#/"), memo: "", lock: false, reveal: 0, kq: "", scroll: 0, res: null, follow: true, title: document.title, vw: document.documentElement.clientWidth, ink: { h: k0, s: window.Ink ? Ink.mine(k0) : [] } };
+    var data = { url: here(), hash: KT.keyPath ? location.hash : (location.hash || "#/"), memo: "", lock: false, hold: false, att: false, reveal: 0, kq: "", scroll: 0, res: null, follow: true, title: document.title, vw: document.documentElement.clientWidth, ink: { h: k0, s: window.Ink ? Ink.mine(k0) : [] } };
     pickOpen().then(function (n) { TRN = n; attempt(); });
     function attempt() {
       X.create(c, Object.assign({}, data)).then(function () {
@@ -275,7 +279,7 @@
     if (unsub) unsub(); unsub = null;
     if (TRN === "rt" && role === "teacher") { RT.cst = null; RT.sent = null; }
     role = null; code = null; doc = null; ssSet(null); TRN = ""; lastInk = null; fitView(0); if (window.Ink && Ink.showCur) Ink.showCur(null);
-    document.body.classList.remove("live-lock", "live-on");
+    document.body.classList.remove("live-lock", "live-on"); setCtl(false, false, true); lastSa = "";
     var p = $("#live-panel"); if (p) p.remove();
     chip();
   }
@@ -287,10 +291,16 @@
       p.className = "live-panel t no-print";
       p.innerHTML = '<div class="lp-head"><b>수업</b><span class="lp-code">' + esc(code) + '</span><button type="button" class="lp-min" data-lp="min" title="접기">–</button></div>' +
         '<div class="lp-body">' + (TRN === "rt" ? '<p class="lp-help">빠른 연결 · 필기가 바로 보여요</p>' : TRN === "fs" ? '<p class="lp-help warn">느린 연결 · 필기는 손을 뗀 뒤 1초쯤 뒤에 보여요</p>' : '<p class="lp-help warn">서버 연결 전 · 이 컴퓨터 창끼리만</p>') +
-        '<label class="lp-ck"><input type="checkbox" data-lp="follow"' + (!doc || doc.follow !== false ? " checked" : "") + "> 학생 화면 따라오기</label>" +
+        '<label class="lp-ck"><input type="checkbox" data-lp="follow"' + (!doc || doc.follow !== false || doc.hold ? " checked" : "") + (doc && doc.hold ? " disabled" : "") + "> 학생 화면 따라오기</label>" +
+        '<label class="lp-ck" title="학생이 스스로 화면을 넘기거나 누를 수 없고, 수업에서 나갈 수 없어요. 필기는 할 수 있어요."><input type="checkbox" data-lp="hold"' + (doc && doc.hold ? " checked" : "") + "> 학생 화면 잠그기</label>" +
+        '<label class="lp-ck" title="학생 화면을 잠시 가리고 ‘선생님을 봐 주세요’를 띄워요."><input type="checkbox" data-lp="att"' + (doc && doc.att ? " checked" : "") + "> 주목 — 학생 화면 가리기</label>" +
         '<label class="lp-ck"><input type="checkbox" data-lp="lock"' + (doc && doc.lock ? " checked" : "") + "> 정답 잠금</label>" +
         '<div class="lp-btns"><button type="button" class="btn sm dark" data-lp="reveal">정답 공개</button><button type="button" class="btn sm line" data-lp="close">수업 닫기</button></div></div>';
-      p.querySelector('[data-lp="follow"]').onchange = function (e) { push({ follow: e.target.checked }, true); };
+      p.querySelector('[data-lp="follow"]').onchange = function (e) { if (doc) doc.follow = e.target.checked; push({ follow: e.target.checked }, true); };
+      /* v125: 학생 화면 잠그기(따라오기도 함께 켠다) · 주목 */
+      p.querySelector('[data-lp="hold"]').onchange = function (e) { var v = e.target.checked, fc = p.querySelector('[data-lp="follow"]'); if (doc) { doc.hold = v; if (v) doc.follow = true; } if (v) fc.checked = true; fc.disabled = v;
+        push(v ? { hold: true, follow: true, scroll: scrollRatio(), sa: SA() } : { hold: false }, true); toast(v ? "학생 화면을 잠갔습니다. 학생은 선생님 화면만 따라옵니다." : "학생 화면 잠금을 풀었습니다."); };
+      p.querySelector('[data-lp="att"]').onchange = function (e) { if (doc) doc.att = e.target.checked; push({ att: e.target.checked }, true); toast(e.target.checked ? "학생 화면을 가렸습니다." : "학생 화면을 다시 보여 줍니다."); };
       p.querySelector('[data-lp="lock"]').onchange = function (e) { if (doc) doc.lock = e.target.checked; push({ lock: e.target.checked }, true); };
       p.querySelector('[data-lp="reveal"]').onclick = function () {
         var n = ((doc && doc.reveal) || 0) + 1; if (doc) { doc.reveal = n; doc.lock = false; }
@@ -300,6 +310,7 @@
       p.querySelector('[data-lp="close"]').onclick = function () { if (confirm("수업을 닫을까요? 학생 화면의 연결도 끝납니다.")) { closeSession(); toast("수업을 닫았습니다."); } };
     } else {
       p.className = "live-panel s no-print";
+      if (lastHold || lastAtt) { p.innerHTML = '<div class="lp-head"><b>수업</b><span class="lp-code">' + esc(code) + '</span><span class="lp-held">선생님이 화면을 잠갔어요</span></div>'; return; }
       p.innerHTML = '<div class="lp-head"><b>수업</b><span class="lp-code">' + esc(code) + '</span><label class="lp-ck sm"><input type="checkbox" data-lp="sfollow"' + (follow ? " checked" : "") + '> 따라가기</label>' + (COARSE ? '<label class="lp-ck sm" title="선생님 화면과 같은 크기·배치로 보여요(작게 보이면 두 손가락으로 키우세요)"><input type="checkbox" data-lp="sfit"' + (fitOn ? " checked" : "") + '> 선생님 화면 크기</label>' : "") + '<button type="button" class="lp-x" data-lp="leave">나가기</button></div>';
       var sf = p.querySelector('[data-lp="sfit"]'); if (sf) sf.onchange = function (e) { fitOn = e.target.checked; try { sessionStorage.setItem("kme.live.fit", fitOn ? "1" : "0"); } catch (x) {} fitView(doc && doc.vw); };
       p.querySelector('[data-lp="sfollow"]').onchange = function (e) { follow = e.target.checked; fitView(doc && doc.vw); if (follow && doc) apply(doc, true); };
@@ -354,17 +365,26 @@
     /* 필기가 바뀌었을 때만 다시 그린다(내리기만 한 때는 그대로) */
     var sig = d.ink ? d.ink.h + "|" + (d.ink.s || []).map(function (x) { return x.i || x.p.length; }).join(",") : "", inkNew = sig !== lastInk || force; lastInk = sig;
     if (window.Ink && inkNew) Ink.showTeacher(d.ink ? d.ink.s : [], d.ink ? d.ink.h : "");
-    fitView(d.follow === false ? 0 : d.vw);
-    if (!follow || d.follow === false) return;
+    /* v125: 선생님이 잠그면 따라가기를 끌 수 없다 */
+    var hold = !!d.hold; setCtl(hold, !!d.att); if (hold) follow = true;
+    fitView(d.follow === false && !hold ? 0 : d.vw);
+    if (!follow || (d.follow === false && !hold)) return;
     if (d.url) {
       var tp = d.url.split("#")[0];
       if (tp !== path()) { if (!applying) { applying = true; location.href = fresh(d.url) || d.url; } return; }
     }
     /* v113: 선생님이 과제 화면(덧창)을 열어 두었으면 필기 열쇠가 host:asg:<과제> — 학생 화면에도 그 과제를 띄우고, 선생님이 내린 만큼 내린다(이때 scroll 은 과제 화면의 위치) */
     var am = /^host:asg:(.+)$/.exec((d.ink && d.ink.h) || ""), aid = am ? am[1] : "";
+    /* v125: 화면 맞추기 — 선생님이 보는 글·그림(d.sa)을 같은 높이에. 못 찾으면 전처럼 '전체 길이의 몇 %'로 */
+    var sa = d.sa && window.Ink && Ink.goAnchor ? d.sa : null, sk = sa ? JSON.stringify(sa) : "", saNew = sk !== lastSa || force || hold, tok = ++saTok; lastSa = sk;
+    var seek = function (smooth) { return !!(sa && tok === saTok && Ink.goAnchor(sa, smooth)); };
     var go = function () {
-      if (window.KMA && KMA.liveAsg) KMA.liveAsg(aid, aid ? d.scroll : null);
-      if (!aid) { openKq(d.kq); scrollTo(d.scroll); }
+      if (window.KMA && KMA.liveAsg) KMA.liveAsg(aid, aid && !sa ? d.scroll : null);
+      if (!aid) { openKq(d.kq); if (!sa) scrollTo(d.scroll); else if (saNew) { if (seek(true)) setTimeout(function () { seek(false); }, 900); else scrollTo(d.scroll); } }
+      else if (sa && saNew) {
+        if (seek(true)) setTimeout(function () { seek(false); }, 900);
+        else [400, 1200, 2400].forEach(function (ms, i) { setTimeout(function () { if (tok !== saTok) return; if (!seek(false) && i === 2 && window.KMA && KMA.liveAsg) KMA.liveAsg(aid, d.scroll); }, ms); });   /* 과제 화면이 아직 안 열렸으면 조금 뒤에 다시 */
+      }
       if (window.Ink && d.ink && inkNew) setTimeout(function () { Ink.showTeacher(d.ink.s, d.ink.h); }, aid ? 500 : 0);
     };
     if ((d.hash || location.hash) && d.hash !== location.hash && !(!KT.keyPath && d.hash === "#/" && !location.hash)) {
@@ -373,6 +393,54 @@
       if (m && d.res && window.DB) DB.set("resources", decodeURIComponent(m[1]), Object.assign({}, d.res, { fromLive: true })).then(nav); else nav();
     } else go();
   }
+  /* ───────── v125: 학생 화면 잠그기 · 주목 ─────────
+     잠그면: 학생은 선생님 화면만 따라간다. 스스로 넘기기·누르기·나가기가 안 된다(필기 도구와 필기는 된다). 손으로 옮겨도 선생님 자리로 돌아온다.
+     주목: 화면을 가리고 '선생님을 봐 주세요'를 띄운다. 새로 고침해도 수업에 다시 들어와 그대로다. (창을 닫거나 다른 사이트로 가는 것까지는 막지 못한다) */
+  var lastHold = false, lastAtt = false, lastSa = "", saTok = 0;
+  function setCtl(hold, att, quiet) {
+    if (hold === lastHold && att === lastAtt) return;
+    var was = lastHold; lastHold = hold; lastAtt = att;
+    document.body.classList.toggle("live-hold", hold); document.body.classList.toggle("live-att", att);
+    var c = $("#live-cover");
+    if (att && !c) { c = document.createElement("div"); c.id = "live-cover"; c.className = "live-cover no-print"; c.setAttribute("role", "status"); c.innerHTML = "<div><b>선생님을 봐 주세요</b><span>선생님이 화면을 잠시 가렸어요</span></div>"; document.body.appendChild(c); }
+    else if (!att && c) c.remove();
+    if (quiet) return;
+    if (hold && !was) toast("선생님이 화면을 잠갔어요. 선생님 화면을 따라갑니다."); else if (!hold && was) toast("화면 잠금이 풀렸어요.");
+    if (role === "student" && $("#live-panel")) renderPanel();
+  }
+  function ctlOn() { return role === "student" && (lastHold || lastAtt); }
+  function ctlOk(t) {   /* 잠겨 있어도 되는 것: 필기 도구, 수업 창, (필기가 켜져 있고 손가락 도구가 아닐 때) 필기 */
+    if (lastAtt || !t || !t.closest) return false;
+    var b = document.body.classList;
+    return !!(t.closest(".ink-bar") || t.closest("#live-panel") || (t.closest(".ink-layer") && b.contains("ink-on") && !b.contains("ink-hand")));
+  }
+  ["click", "dblclick", "auxclick", "contextmenu", "mousedown", "pointerdown", "touchstart", "submit", "change", "input", "dragstart"].forEach(function (ev) {
+    document.addEventListener(ev, function (e) { if (!ctlOn() || ctlOk(e.target)) return; e.stopPropagation(); if (e.cancelable) e.preventDefault(); }, { capture: true, passive: false });
+  });
+  ["wheel", "touchmove"].forEach(function (ev) {
+    window.addEventListener(ev, function (e) { if (!ctlOn() || (ev === "touchmove" && ctlOk(e.target))) return; e.stopPropagation(); if (e.cancelable) e.preventDefault(); }, { capture: true, passive: false });
+  });
+  window.addEventListener("keydown", function (e) {
+    if (!ctlOn()) return;
+    if (/^(Arrow|Page)|^(Home|End|Tab|Enter|Escape|Backspace| |Spacebar)$/.test(e.key) || e.ctrlKey || e.metaKey || e.altKey) { e.stopPropagation(); e.preventDefault(); }
+  }, true);
+  /* 스크롤 막대를 끌거나 다른 길로 옮겼으면 선생님 자리로 되돌린다 */
+  var backT = null;
+  document.addEventListener("scroll", function () {
+    if (!ctlOn() || !lastHold || !doc) return;
+    clearTimeout(backT); backT = setTimeout(function () {
+      if (!ctlOn() || !doc) return;
+      var d = doc, am = /^host:asg:(.+)$/.exec((d.ink && d.ink.h) || "");
+      if (d.sa && window.Ink && Ink.goAnchor && Ink.goAnchor(d.sa, false)) return;
+      if (!am) scrollTo(d.scroll);
+    }, 220);
+  }, true);
+  (function () { var st = document.createElement("style");
+    st.textContent = ".live-cover{position:fixed;inset:0;z-index:2147483000;background:#FDFCFA;display:flex;align-items:center;justify-content:center;text-align:center;touch-action:none;font-family:\"Pretendard Variable\",\"Pretendard\",\"Noto Sans KR\",sans-serif}" +
+      ".live-cover b{display:block;font-size:30px;font-weight:600;color:#262625;letter-spacing:-.01em}.live-cover span{display:block;margin-top:12px;font-size:15px;color:#8A8A85}" +
+      ".live-panel .lp-held{margin-left:auto;font-size:12.5px;color:#A44A3F;white-space:nowrap}" +
+      "body.live-hold{overscroll-behavior:none}@media print{.live-cover{display:none!important}}";
+    document.head.appendChild(st); })();
   function openKq(key) {
     if (!key) return;
     var el = document.querySelector('details.kq[data-key="' + (window.CSS && CSS.escape ? CSS.escape(key) : key) + '"]');
@@ -422,7 +490,7 @@
   var st = null;
   window.addEventListener("scroll", function () {
     if (role !== "teacher") return;
-    clearTimeout(st); st = setTimeout(function () { push({ scroll: scrollRatio() }); }, TRN === "rt" ? 80 : 250);
+    clearTimeout(st); st = setTimeout(function () { push({ scroll: scrollRatio(), sa: SA() }); }, TRN === "rt" ? 80 : 250);
   }, { passive: true });
   document.addEventListener("toggle", function (e) {
     var d = e.target; if (role !== "teacher" || !d.matches || !d.matches("details.kq")) return;
@@ -455,8 +523,8 @@
     locked: function () { return role === "student" && lastLock; },
     role: function () { return role; },
     /* v113: 과제 화면이 열리고 닫힐 때(account.js) — 필기 열쇠가 바뀌므로 그 열쇠와 필기를 바로 보낸다 */
-    asg: function (id) { if (role !== "teacher") return; var k = inkKey(); push({ ink: { h: k, s: window.Ink ? Ink.mine(k) : [] }, scroll: id ? 0 : scrollRatio() }, true); },
-    asgScroll: function (r) { if (role === "teacher") push({ scroll: r }); },
+    asg: function (id) { if (role !== "teacher") return; var k = inkKey(); push({ ink: { h: k, s: window.Ink ? Ink.mine(k) : [] }, scroll: id ? 0 : scrollRatio(), sa: null }, true); },
+    asgScroll: function (r) { if (role === "teacher") push({ scroll: r, sa: SA() }); },
     code: function () { return code; },
     open: openSession, join: join, close: closeSession, menu: menu,
     server: SRV, via: function () { return TRN; }, fast: function () { return RT.available(); }

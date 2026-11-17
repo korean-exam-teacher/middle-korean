@@ -11,6 +11,11 @@
  *   - getCoalescedEvents(사이 점까지)·getPredictedEvents(앞질러 그리기)로 펜 끝을 바짝 따라간다.
  *   - 펜·손가락·마우스 모두 쓴다. 펜이 닿아 있거나 막 뗀 때(0.6초)만 손바닥(터치)을 무시하고, 펜을 쓰는 기기에서는 손가락으로 끌면 화면이 내려간다.
  *   - iPad: 길게 누름·확대경·글자 고르기를 막는다(touchstart 막기, user-select 끔).
+ * v125: 글 위의 필기를 글자에 붙인다 · 수업에서 화면 맞추기
+ *   - 글이 있는 칸에 쓴 획은 긋기 시작한 자리의 글자 하나에 붙인다(열쇠: "칸|번호|@글자 번호|그 자리의 글자 여덟"). 크기는 그 글의 글자 크기를 따른다(1000 = 글자 크기×40).
+ *     기기마다 줄이 달리 나뉘어도(글꼴·글자 크기 설정·화면 너비) 그 글자를 따라가므로, 아래로 갈수록 어긋나던 일이 없다. 그림에 붙인 획과 예전 획은 그대로.
+ *   - Ink.viewAnchor() / Ink.goAnchor(): 선생님 화면의 한 점 아래 있는 글·그림을 학생 화면의 같은 높이에 오게(live.js). 전에는 '전체 길이의 몇 %'로 맞춰 화면 크기가 다르면 다른 곳이 보였다.
+ *   - 휴대폰이 넓은 화면에서 글자를 키우지 않게(text-size-adjust:100%).
  * v124: 필기 단추·가려지는 필기
  *   - 꺼져 있을 때는 왼쪽 아래 동그란 단추 하나. 켜면 그 자리에서 옆으로 도구가 펼쳐진다(좁은 화면에서는 위로 한 줄 더).
  *   - 화면을 손가락으로 확대해도(핀치) 단추는 지금 보이는 화면의 왼쪽 아래에 같은 크기로 있다(visualViewport).
@@ -82,7 +87,8 @@
   }
   (function css() {
     var st = document.createElement("style");
-    st.textContent = ".ink-live{position:fixed;left:0;top:0;z-index:26;pointer-events:none}" +
+    st.textContent = "html{-webkit-text-size-adjust:100%;text-size-adjust:100%}" +   /* v125: 휴대폰이 넓은 화면에서 글자를 키우면 줄이 달리 나뉘어 선생님 필기와 어긋난다 */
+      ".ink-live{position:fixed;left:0;top:0;z-index:26;pointer-events:none}" +
       "body.ink-on{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}" +
       "body.ink-on .ink-layer{pointer-events:auto;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}" +
       "svg.ink-layer{z-index:4}" +   /* v124: 본문 위, 붙박이 머리·띠 아래 — 지문이 머리 뒤로 올라가 숨으면 그 위에 쓴 필기도 함께 숨는다(전에는 54라 머리 위에 필기만 남아 보였다) */
@@ -182,7 +188,87 @@
     im._ik = k; im._ikn = n; return k;
   }
   function sameSrc(sc, k) { var out = [], l = sc.getElementsByTagName("img"); for (var i = 0; i < l.length; i++) if (srcKey(l[i]) === k) out.push(l[i]); return out; }
-  /* 화면의 한 점 아래에서 필기를 붙일 곳 → { el, key } (없으면 null) */
+  /* ───────── v125: 글자에 붙이기 ───────── */
+  var EMW = 40, RNG = null;   /* 글자에 붙인 획의 좌표: 1000 = 그 글의 글자 크기 × 40 */
+  /* 그 칸의 글자들(글 마디들을 차례로 이은 것): { n: 글 마디, c: 마디가 시작하는 번호, t: 이은 글 } */
+  function textIndex(el, cache) {
+    var m = cache ? (cache._ti || (cache._ti = new Map())) : null, v = m && m.get(el);
+    if (v) return v;
+    var w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null), n = [], c = [], t = "", x;
+    while ((x = w.nextNode())) { n.push(x); c.push(t.length); t += x.data; }
+    v = { n: n, c: c, t: t }; if (m) m.set(el, v); return v;
+  }
+  /* i번째 글자의 네모(줄바꿈처럼 자리가 없는 글자는 null) */
+  function charRect(ti, i) {
+    if (i < 0 || i >= ti.t.length) return null;
+    var lo = 0, hi = ti.n.length - 1, m; while (lo < hi) { m = (lo + hi + 1) >> 1; if (ti.c[m] <= i) lo = m; else hi = m - 1; }
+    var nd = ti.n[lo], off = i - ti.c[lo]; if (off >= nd.data.length) return null;
+    RNG = RNG || document.createRange();
+    try { RNG.setStart(nd, off); RNG.setEnd(nd, off + 1); } catch (e) { return null; }
+    var rs = RNG.getClientRects(), r = rs.length ? rs[0] : null;
+    return r && (r.width > 0 || r.height > 0) && r.height > 0 ? r : null;
+  }
+  function rectNear(ti, i) { var r = charRect(ti, i), d; for (d = 1; !r && d <= 16; d++) r = charRect(ti, i - d) || charRect(ti, i + d); return r; }
+  /* (x, y)에 있는(없으면 읽는 차례로 가장 가까운) 글자의 번호. 글자가 없으면 -1 */
+  function charSeek(ti, x, y) {
+    var N = ti.t.length; if (!N) return -1;
+    var lo = 0, hi = N - 1, guard = 0, mid, m, r;
+    while (lo < hi && guard++ < 48) {
+      mid = (lo + hi) >> 1; m = mid; r = null;
+      while (m <= hi && !(r = charRect(ti, m))) m++;          /* 자리가 없는 글자는 건너뛴다 */
+      if (!r) { hi = mid; continue; }
+      if (r.bottom <= y || (r.top <= y && r.right < x)) lo = m + 1;    /* 그 글자보다 뒤(아랫줄이거나 같은 줄 오른쪽) */
+      else if (r.top > y) hi = mid;                                     /* 그 글자보다 앞(윗줄) */
+      else if (m === mid) hi = mid; else lo = hi = m;                   /* 같은 줄, 그 글자이거나 그 앞 */
+    }
+    var i = Math.min(lo, N - 1), c = charRect(ti, i), k;
+    if (!c) { for (k = 1; !c && k <= 16; k++) { if ((c = charRect(ti, i - k))) i -= k; else if ((c = charRect(ti, i + k))) i += k; } if (!c) return -1; }
+    return i;
+  }
+  function prevRect(ti, i) { for (var k = 1, p = null; k <= 16 && i - k >= 0; k++) if ((p = charRect(ti, i - k))) return [p, i - k]; return null; }
+  function charAt(ti, x, y) {
+    var i = charSeek(ti, x, y); if (i < 0) return -1;
+    var c = charRect(ti, i), p, best, j, q;
+    if (c && (y < c.top || y >= c.bottom)) {                 /* 줄 사이·줄 바깥: 가까운 줄(찾은 글자의 줄 또는 그 앞 글자의 줄)의 가운데 높이로 다시 찾는다 */
+      p = prevRect(ti, i); best = c;
+      if (p && Math.abs(y - (p[0].top + p[0].bottom) / 2) < Math.abs(y - (c.top + c.bottom) / 2)) best = p[0];
+      j = charSeek(ti, x, (best.top + best.bottom) / 2);
+      if (j >= 0) { i = j; c = charRect(ti, i); }
+    }
+    if (c && c.top > y + 1 && x > c.right) { q = prevRect(ti, i); if (q && q[0].top <= c.top - 2) i = q[1]; }   /* 줄 끝 오른쪽 빈 곳에서는 아랫줄 첫 글자가 잡힌다 → 그 줄의 마지막 글자로 */
+    return i;
+  }
+  function fpOf(t, i) { return t.substr(i, 8).replace(/[|\n\r\t]/g, " "); }
+  /* 글자에 붙인 열쇠("칸|번호|@글자 번호|그 자리의 글자 여덟") → { e: 칸, r: 좌표의 기준(그 글자의 왼쪽 위, 너비 = 글자 크기×40), er: 칸의 네모 }
+     글이 조금 달라 번호가 밀렸으면 같은 글자열을 가까운 데서(이웃 칸까지) 찾는다 */
+  function charGeo(key, at, cache) {
+    var base = key.slice(0, at), rest = key.slice(at + 2), q = rest.indexOf("|"), ci = +(q < 0 ? rest : rest.slice(0, q)), fp = q < 0 ? "" : rest.slice(q + 1);
+    var p = base.split("|"), sc = scopeEl(), list = BLOCKS.indexOf(p[0]) > 0 ? sc.querySelectorAll(p[0]) : [], idx = +p[1], e = list[idx] || null, i = -1, d, a2, b2;
+    var probe = function (el) {
+      if (!el) return -1; var t = textIndex(el, cache).t;
+      if (!fp) return ci < t.length ? ci : -1;
+      if (fpOf(t, ci) === fp) return ci;
+      var nt = t.replace(/[|\n\r\t]/g, " "), best = -1, from = 0, j;
+      while ((j = nt.indexOf(fp, from)) >= 0) { if (best < 0 || Math.abs(j - ci) < Math.abs(best - ci)) best = j; if (j > ci) break; from = j + 1; }
+      return best;
+    };
+    i = probe(e);
+    for (d = 1; i < 0 && d <= 8; d++) { a2 = list[idx - d]; b2 = list[idx + d]; if (a2 && (i = probe(a2)) >= 0) e = a2; else if (b2 && (i = probe(b2)) >= 0) e = b2; }
+    if (i < 0) { e = list[idx] || null; if (!e) return null; i = Math.min(ci, textIndex(e, cache).t.length - 1); }
+    var er = e.getBoundingClientRect(); if (er.width < 2) return null;
+    var cr = rectNear(textIndex(e, cache), i); if (!cr) return null;
+    return { e: e, r: { left: cr.left, top: cr.top, width: (parseFloat(getComputedStyle(e).fontSize) || 16) * EMW }, er: er };
+  }
+  /* 붙인 곳의 자리: 그림·칸이면 그 네모, 글자면 charGeo */
+  function anchorGeo(key, cache) {
+    var gk = "g:" + key; if (cache && gk in cache) return cache[gk];
+    var at = key.indexOf("|@"), out = null, e, er;
+    if (at < 0) { e = findAnchor(key, cache); er = e ? e.getBoundingClientRect() : null; out = er && er.width >= 2 ? { e: e, r: er, er: er } : null; }
+    else out = charGeo(key, at, cache);
+    if (cache) cache[gk] = out;
+    return out;
+  }
+  /* 화면의 한 점 아래에서 필기를 붙일 곳 → { el, key, r } (없으면 null). r = 좌표의 기준 네모 */
   function anchorAt(x, y) {
     if (!svg) return null;
     svg.style.pointerEvents = "none"; if (live) live.style.display = "none";
@@ -192,8 +278,14 @@
     if (!t || !sc.contains(t) || (bar && bar.contains(t)) || !t.closest) return null;
     var a = t.closest(BSEL); if (!a || a === sc || !sc.contains(a)) return null;
     var r = a.getBoundingClientRect(); if (r.width < 24 || r.height < 8) return null;
-    if (a.tagName === "IMG") { var k = srcKey(a), same = sameSrc(sc, k); return { el: a, key: "img|" + k + "|" + Math.max(0, same.indexOf(a)) }; }
-    for (var i = 1; i < BLOCKS.length; i++) if (a.matches(BLOCKS[i])) { var idx = Array.prototype.indexOf.call(sc.querySelectorAll(BLOCKS[i]), a); return idx < 0 ? null : { el: a, key: BLOCKS[i] + "|" + idx }; }
+    if (a.tagName === "IMG") { var k = srcKey(a), same = sameSrc(sc, k); return { el: a, key: "img|" + k + "|" + Math.max(0, same.indexOf(a)), r: r }; }
+    for (var i = 1; i < BLOCKS.length; i++) if (a.matches(BLOCKS[i])) {
+      var idx = Array.prototype.indexOf.call(sc.querySelectorAll(BLOCKS[i]), a); if (idx < 0) return null;
+      /* v125: 글이 있는 칸이면 그 자리의 글자에 붙인다(줄이 달리 나뉘어도 그 글자를 따라간다) */
+      var ti = textIndex(a, null), ci = ti.t.length ? charAt(ti, x, y) : -1, cr = ci >= 0 ? charRect(ti, ci) : null;
+      if (cr) return { el: a, key: BLOCKS[i] + "|" + idx + "|@" + ci + "|" + fpOf(ti.t, ci), r: { left: cr.left, top: cr.top, width: (parseFloat(getComputedStyle(a).fontSize) || 16) * EMW } };
+      return { el: a, key: BLOCKS[i] + "|" + idx, r: r };
+    }
     return null;
   }
   function findAnchor(key, cache) {
@@ -226,6 +318,7 @@
   function clipRect(akey) {   /* 붙인 곳마다 자르는 틀 하나(<clipPath><rect>) */
     if (!cpDefs || cpDefs.parentNode !== svg) { cpDefs = document.createElementNS(NS, "defs"); svg.insertBefore(cpDefs, svg.firstChild); cpIds = {}; }
     var c = cpIds[akey];
+    if (!c && cpDefs.childNodes.length > 240) { while (cpDefs.firstChild) cpDefs.removeChild(cpDefs.firstChild); cpIds = {}; [gT, gC, gM].forEach(function (g) { for (var n = g.firstChild; n; n = n.nextSibling) if (n._cp) { n._cp = ""; n.removeAttribute("clip-path"); } }); }
     if (!c) { var cp = document.createElementNS(NS, "clipPath"), rc = document.createElementNS(NS, "rect"); cp.setAttribute("id", "inkcp" + (++cpN)); cp.setAttribute("clipPathUnits", "userSpaceOnUse"); cp.appendChild(rc); cpDefs.appendChild(cp); c = cpIds[akey] = { id: "inkcp" + cpN, rc: rc, v: "" }; }
     return c;
   }
@@ -237,13 +330,15 @@
       for (var n = g.firstChild; n; n = n.nextSibling) {
         var st = n._s; if (!st || !st.a) continue;
         if (!b) b = baseGeo();
-        var e = findAnchor(st.a, cache), r = e ? e.getBoundingClientRect() : null;
-        if (!r || r.width < 2) { if (n.style.display !== "none") n.style.display = "none"; continue; }
+        var G = anchorGeo(st.a, cache);
+        if (!G) { if (n.style.display !== "none") n.style.display = "none"; continue; }
+        var e = G.e, r = G.r, er = G.er;
         /* v124: 스스로 스크롤하는 칸 밖으로 나간 부분은 보이지 않게 */
         var cb = st.a in boxes ? boxes[st.a] : (boxes[st.a] = clipBox(e)), want = "";
-        if (cb && (r.left < cb[0] - 1 || r.top < cb[1] - 1 || r.right > cb[2] + 1 || r.bottom > cb[3] + 1)) {
-          if (cb[2] <= cb[0] || cb[3] <= cb[1] || r.right <= cb[0] || r.left >= cb[2] || r.bottom <= cb[1] || r.top >= cb[3]) { if (n.style.display !== "none") n.style.display = "none"; continue; }   /* 통째로 칸 밖 */
-          var c = clipRect(st.a), u = 1000 / r.width, v = [((Math.max(cb[0], r.left - 400) - r.left) * u).toFixed(1), ((Math.max(cb[1], r.top - 400) - r.top) * u).toFixed(1), ((Math.min(cb[2], r.right + 400) - Math.max(cb[0], r.left - 400)) * u).toFixed(1), ((Math.min(cb[3], r.bottom + 400) - Math.max(cb[1], r.top - 400)) * u).toFixed(1)].join(" ");
+        if (cb && (er.left < cb[0] - 1 || er.top < cb[1] - 1 || er.right > cb[2] + 1 || er.bottom > cb[3] + 1)) {
+          if (cb[2] <= cb[0] || cb[3] <= cb[1] || er.right <= cb[0] || er.left >= cb[2] || er.bottom <= cb[1] || er.top >= cb[3]) { if (n.style.display !== "none") n.style.display = "none"; continue; }   /* 통째로 칸 밖 */
+          var c = clipRect(st.a), u = 1000 / r.width, x0 = Math.max(cb[0], er.left - 400), y0 = Math.max(cb[1], er.top - 400), x1 = Math.min(cb[2], er.right + 400), y1 = Math.min(cb[3], er.bottom + 400),
+            v = [((x0 - r.left) * u).toFixed(1), ((y0 - r.top) * u).toFixed(1), ((x1 - x0) * u).toFixed(1), ((y1 - y0) * u).toFixed(1)].join(" ");
           if (c.v !== v) { c.v = v; var vs = v.split(" "); c.rc.setAttribute("x", vs[0]); c.rc.setAttribute("y", vs[1]); c.rc.setAttribute("width", vs[2]); c.rc.setAttribute("height", vs[3]); }
           want = "url(#" + c.id + ")";
         }
@@ -294,8 +389,8 @@
   /* 화면의 한 점을 그 획의 좌표로: [x, y, 배율] (붙인 곳이 지금 안 보이면 null) */
   function locOf(s, cx, cy, b, cache) {
     if (!s.a) return [(cx - b.ox) / b.w * 1000, (cy - b.oy) / b.w * 1000, 1];
-    var e = findAnchor(s.a, cache), r = e ? e.getBoundingClientRect() : null;
-    if (!r || r.width < 2) return null;
+    var G = anchorGeo(s.a, cache), r = G ? G.r : null;
+    if (!r) return null;
     return [(cx - r.left) / r.width * 1000, (cy - r.top) / r.width * 1000, r.width / b.w];
   }
   /* 획 지우개: 닿은 획을 통째로 */
@@ -391,7 +486,7 @@
     };
     var cl = null, t0 = Date.now(), ox = e.clientX, oy = e.clientY, far = false;
     /* v114: 긋기 시작한 자리 아래의 그림·칸에 붙인다. 좌표는 그것의 왼쪽 위·너비 기준 */
-    var A = erasing ? null : anchorAt(e.clientX, e.clientY), AR = A ? A.el.getBoundingClientRect() : null;
+    var A = erasing ? null : anchorAt(e.clientX, e.clientY), AR = A ? A.r : null;
     var cpt = function (ev) { return AR ? [Math.round((ev.clientX - AR.left) / AR.width * 1000), Math.round((ev.clientY - AR.top) / AR.width * 1000)] : pt(ev); };
     var minStep = AR ? Math.max(1.2, 1.2 * W() / AR.width) : 1.2;
     if (erasing) er(e);
@@ -488,6 +583,7 @@
       e = l[i]; if (e._inkZ) continue; e._inkZ = 1;
       if (e === bar || e === svg || e === live || (bar && bar.contains(e))) continue;
       cs = getComputedStyle(e); if (cs.position !== "sticky" && cs.position !== "fixed") continue;
+      e._inkBar = 1;
       if (cs.zIndex === "auto" || +cs.zIndex < 5) e.style.zIndex = "5";
     }
   }
@@ -532,7 +628,28 @@
       if (!st || !st.p || st.p.length < 2 || (k && k !== pageKey())) return;
       gC.appendChild(el(st)); placeAll();
     },
-    key: function () { var h = findHost(); return h ? "host:" + h.getAttribute("data-ink-host") : baseKey(); },   /* 덧창이 막 열리고 닫힌 때에도 맞는 열쇠 */
+    key: function () { var h = findHost(); return h ? "host:" + h.getAttribute("data-ink-host") : baseKey(); },
+    /* v125: 수업에서 화면 맞추기 — [붙인 곳 열쇠, 그 안에서의 높이(1000 = 기준 너비), 화면 높이에서의 비율] */
+    viewAnchor: function () {
+      if (!svg) return null;
+      var top = 0, vh = innerHeight, cx, fr = [0.3, 0.5, 0.18, 0.7], i, A, p, bad;
+      if (host) { var g = hostGeo(); top = g.T; vh = g.hh; cx = g.ox + g.w / 2; }
+      else { var mr = main && main !== document.body ? main.getBoundingClientRect() : null; cx = mr && mr.width > 40 ? mr.left + mr.width / 2 : document.documentElement.clientWidth / 2; }
+      for (i = 0; i < fr.length; i++) {
+        A = anchorAt(cx, top + vh * fr[i]); if (!A) continue;
+        for (bad = false, p = A.el; p && p !== document.body; p = p.parentElement) if (p._inkBar) { bad = true; break; }   /* 붙박이 머리·띠에 든 것은 기준으로 삼지 않는다 */
+        if (!bad) return [A.key, Math.round((top + vh * fr[i] - A.r.top) / A.r.width * 1000), fr[i]];
+      }
+      return null;
+    },
+    goAnchor: function (sa, smooth) {
+      if (!sa || !sa[0] || !svg) return false;
+      var G = anchorGeo(String(sa[0]), {}); if (!G) return false;
+      var top = 0, vh = innerHeight; if (host) { var g = hostGeo(); top = g.T; vh = g.hh; }
+      var d = G.r.top + (+sa[1] || 0) / 1000 * G.r.width - (top + vh * (+sa[2] || 0.3));
+      if (Math.abs(d) >= 2) (host || window).scrollBy({ top: d, behavior: smooth && Math.abs(d) < 2400 ? "smooth" : "auto" });
+      return true;
+    },   /* 덧창이 막 열리고 닫힌 때에도 맞는 열쇠 */
     refreshBar: function () { if (bar) renderBar(); }
   };
 })();
