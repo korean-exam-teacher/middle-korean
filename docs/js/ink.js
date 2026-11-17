@@ -11,6 +11,10 @@
  *   - getCoalescedEvents(사이 점까지)·getPredictedEvents(앞질러 그리기)로 펜 끝을 바짝 따라간다.
  *   - 펜·손가락·마우스 모두 쓴다. 펜이 닿아 있거나 막 뗀 때(0.6초)만 손바닥(터치)을 무시하고, 펜을 쓰는 기기에서는 손가락으로 끌면 화면이 내려간다.
  *   - iPad: 길게 누름·확대경·글자 고르기를 막는다(touchstart 막기, user-select 끔).
+ * v121: 덧창(과제 풀기·모아 풀기 등)에서 화면을 내리면 필기가 제자리에 남거나 늦게 따라오던 것을 고침
+ *   - 전에는 필기 층을 화면에 붙박아 두고(position:fixed) 스크롤 알림이 올 때마다 그림을 옮겼다. 휴대폰은 화면을 먼저 내리고 알림을 늦게 줘서 필기가 남아 보였다.
+ *   - 이제 필기 층을 덧창 안에 넣어(내용 전체 크기) 내용과 한 몸으로 움직인다. 덧창이 내용을 새로 그리며 필기 층을 지우면 바로 다시 넣는다(MutationObserver).
+ *   - 그림 열쇠: <img data-ik="…">가 있으면 그 값을 쓴다(그림 주소가 바뀌어도 예전 필기가 그 그림에 그대로 붙어 있게).
  * v116: 필기를 시작하면 화면이 까맣게 되던 것을 고침
  *   - 긋는 중인 획을 그리는 캔버스(ink-live)의 크기에 위 한도를 둔다(가로·세로 4096, 넓이 400만 점). 수업 중 휴대폰이 선생님 화면 너비로 바뀌면 캔버스가 수천만 점이 되어 기기가 감당하지 못했다.
  *   - 안드로이드에서는 캔버스를 쓰지 않고 긋는 중인 획도 SVG 한 줄로 그린다(일부 기기에서 빠른 캔버스가 검게 나오는 일이 있어서).
@@ -77,6 +81,7 @@
       "body.ink-on .ink-layer{pointer-events:auto;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}" +
       "svg.ink-layer{z-index:54}" +   /* 붙박이 머리(메뉴) 위에도 쓸 수 있게 */
       ".ink-layer.ink-fixed{position:fixed!important}" +
+      ".ink-layer.ink-in{position:absolute!important;margin:0!important;max-width:none!important;max-height:none!important}" +
       "body.ink-on.ink-hand .ink-layer{pointer-events:none!important}body.ink-on.ink-hand{-webkit-user-select:auto;user-select:auto;-webkit-touch-callout:default}" +
       ".ink-bar .ink-hand{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;padding:0;border-radius:50%}.ink-bar .ink-hand.sel{background:#2F4F7F;color:#fff}" +
       ".ink-bar{max-width:calc(100vw - 16px);flex-wrap:wrap}" +
@@ -86,6 +91,20 @@
     document.head.appendChild(st);
   })();
 
+  /* v121: 덧창이 내용을 새로 그리면(innerHTML) 그 안에 넣어 둔 필기 층도 지워진다 → 바로 다시 넣고 크기를 다시 맞춘다 */
+  var hostMO = null, hostW = null, hostT = 0;
+  function watchHost(h) {
+    if (hostW === h) return;
+    if (hostMO) { hostMO.disconnect(); hostMO = null; }
+    hostW = h;
+    if (!h || !window.MutationObserver) return;
+    hostMO = new MutationObserver(function () {
+      if (!svg || hostW !== host || !host) return;
+      if (svg.parentNode !== host) host.appendChild(svg);
+      clearTimeout(hostT); hostT = setTimeout(function () { if (host && hostW === host) { ensure(); placeAll(); } }, 0);
+    });
+    hostMO.observe(h, { childList: true });
+  }
   function ensure() {
     var m = rootEl();
     if (!m) { if (svg) svg.style.display = "none"; return false; }
@@ -99,15 +118,32 @@
       svg.addEventListener("contextmenu", function (e) { if (on) e.preventDefault(); });
     }
     main = m; svg.style.display = "";
-    if (host) {   /* 덧창: 덧창이 보이는 칸에 붙박아 두고, 스크롤한 만큼 그림을 옮긴다 */
-      var g = hostGeo(), z = parseInt(getComputedStyle(host).zIndex, 10) || 0;
-      svg.classList.add("ink-fixed");
-      svg.style.left = g.L + "px"; svg.style.top = g.T + "px"; svg.style.width = g.hw + "px"; svg.style.height = g.hh + "px";
-      svg.style.zIndex = z + 1; if (bar) { bar.style.zIndex = z + 3; bar.style.bottom = (host.getAttribute("data-ink-bottom") || 16) + "px"; } if (live) live.style.zIndex = z + 2;
-      svg.setAttribute("viewBox", g.vb);
+    if (host) {
+      var cs = getComputedStyle(host), z = parseInt(cs.zIndex, 10) || 0;
+      if (bar) { bar.style.zIndex = z + 3; bar.style.bottom = (host.getAttribute("data-ink-bottom") || 16) + "px"; } if (live) live.style.zIndex = z + 2;
+      if (cs.position !== "static") {   /* v121: 덧창 안에 넣는다 — 내용 전체 크기로 깔아, 스크롤하면 내용과 함께 움직인다 */
+        watchHost(host);
+        if (svg.parentNode !== host) host.appendChild(svg);
+        svg.classList.remove("ink-fixed"); svg.classList.add("ink-in"); svg.style.zIndex = "";
+        svg.style.left = "0px"; svg.style.top = "0px"; svg.style.width = "0px"; svg.style.height = "0px";   /* 필기 층이 덧창의 높이를 늘리지 않게, 먼저 접고 잰다 */
+        var sw = Math.max(host.scrollWidth, host.clientWidth), sh = Math.max(host.scrollHeight, host.clientHeight), g = hostGeo();
+        svg.style.width = sw + "px"; svg.style.height = sh + "px";
+        svg.setAttribute("viewBox", ((g.L - host.scrollLeft - g.ox) / g.w * 1000) + " " + ((g.T - host.scrollTop - g.oy) / g.w * 1000) + " " + (sw / g.w * 1000) + " " + (sh / g.w * 1000));
+        return true;
+      }
+      /* 자리를 잡지 않은(static) 덧창: 전처럼 보이는 칸에 붙박아 두고, 스크롤한 만큼 그림을 옮긴다 */
+      watchHost(null);
+      if (svg.parentNode !== document.body) document.body.appendChild(svg);
+      var g2 = hostGeo();
+      svg.classList.remove("ink-in"); svg.classList.add("ink-fixed");
+      svg.style.left = g2.L + "px"; svg.style.top = g2.T + "px"; svg.style.width = g2.hw + "px"; svg.style.height = g2.hh + "px";
+      svg.style.zIndex = z + 1;
+      svg.setAttribute("viewBox", g2.vb);
       return true;
     }
-    svg.classList.remove("ink-fixed"); svg.style.zIndex = ""; if (bar) { bar.style.zIndex = ""; bar.style.bottom = ""; } if (live) live.style.zIndex = "";
+    watchHost(null);
+    if (svg.parentNode !== document.body) document.body.appendChild(svg);
+    svg.classList.remove("ink-fixed"); svg.classList.remove("ink-in"); svg.style.zIndex = ""; if (bar) { bar.style.zIndex = ""; bar.style.bottom = ""; } if (live) live.style.zIndex = "";
     /* 문서 전체를 덮는다. 본문(main)의 왼쪽 위가 (0,0), 본문 너비가 1000 */
     var r = main.getBoundingClientRect(), w = r.width || 1, mx = r.left + scrollX, my = r.top + scrollY;
     if (main === document.body) { w = document.documentElement.clientWidth; mx = 0; my = 0; }
@@ -128,6 +164,7 @@
   function scopeEl() { return host || document.body; }
   /* 그림의 열쇠: 주소의 경로. 그림을 통째로 담은 주소(data:)는 길이와 짧은 요약값만(획마다 적어 두므로 짧아야 한다) */
   function srcKey(im) {
+    var ik = im.getAttribute("data-ik"); if (ik) return ik;
     var u = im.getAttribute("src") || "", n = u.length, k;
     if (im._ik && im._ikn === n) return im._ik;
     if (u.slice(0, 5) === "data:") { var h = 5381, step = Math.max(1, Math.floor(n / 4000)); for (var i = 0; i < n; i += step) h = ((h << 5) + h + u.charCodeAt(i)) | 0; k = "d" + n.toString(36) + "." + (h >>> 0).toString(36); }
@@ -396,13 +433,20 @@
   var lastH = 0;
   setInterval(function () {
     var hs = findHost(), m = rootEl(), h;
-    if (hs) h = "H" + hs.scrollHeight + "/" + hs.clientWidth + "/" + hs.clientHeight;
+    if (hs) { var ch = 0; for (var c = hs.firstElementChild; c; c = c.nextElementSibling) if (c !== svg) ch += c.offsetHeight;   /* 필기 층 자신은 높이에 넣지 않는다 */
+      h = "H" + ch + "/" + hs.clientWidth + "/" + hs.clientHeight; }
     else h = m ? document.body.offsetHeight + "/" + m.scrollHeight + "/" + Math.round(m.getBoundingClientRect().width) + "/" + document.documentElement.clientWidth : "";   /* 필기 층 자신은 높이에 넣지 않는다 */
     if (hs !== host || pageKey() !== key || h !== lastH) { lastH = h; check(); }
     else placeAll();   /* 그림이 늦게 뜨거나 내용이 펼쳐져 자리가 바뀐 것을 따라간다 */
   }, 400);
   /* 덧창을 스크롤하면 필기도 함께 움직인다 */
-  document.addEventListener("scroll", function (e) { if (host && e.target === host && svg) svg.setAttribute("viewBox", hostGeo().vb); }, true);
+  document.addEventListener("scroll", function (e) { if (host && e.target === host && svg && svg.classList.contains("ink-fixed")) svg.setAttribute("viewBox", hostGeo().vb); }, true);
+  /* v121: 화면 안의 작은 칸(스스로 스크롤하는 지문 칸 등)을 내리면, 그 안의 글·그림에 붙인 필기를 바로 따라 옮긴다(전에는 0.4초마다 맞췄다) */
+  var inRaf = 0;
+  document.addEventListener("scroll", function (e) {
+    var t = e.target; if (!svg || !t || t.nodeType !== 1 || t === host || t === document.documentElement || t === document.body) return;
+    if (!inRaf) inRaf = requestAnimationFrame(function () { inRaf = 0; placeAll(); });
+  }, true);
   window.addEventListener("resize", function () { redraw(); fitLive(); });
   setTimeout(function () { check(); renderBar(); }, 0);
 
