@@ -11,6 +11,7 @@
  *   - getCoalescedEvents(사이 점까지)·getPredictedEvents(앞질러 그리기)로 펜 끝을 바짝 따라간다.
  *   - 펜·손가락·마우스 모두 쓴다. 펜이 닿아 있거나 막 뗀 때(0.6초)만 손바닥(터치)을 무시하고, 펜을 쓰는 기기에서는 손가락으로 끌면 화면이 내려간다.
  *   - iPad: 길게 누름·확대경·글자 고르기를 막는다(touchstart 막기, user-select 끔).
+ * v127: 화면 맞추기가 붙박이 칸·스스로 스크롤하는 칸을 기준으로 삼지 않음(inBox) · 칸 안에서 보는 곳 Ink.boxAnchor()/goBox()
  * v125: 글 위의 필기를 글자에 붙인다 · 수업에서 화면 맞추기
  *   - 글이 있는 칸에 쓴 획은 긋기 시작한 자리의 글자 하나에 붙인다(열쇠: "칸|번호|@글자 번호|그 자리의 글자 여덟"). 크기는 그 글의 글자 크기를 따른다(1000 = 글자 크기×40).
  *     기기마다 줄이 달리 나뉘어도(글꼴·글자 크기 설정·화면 너비) 그 글자를 따라가므로, 아래로 갈수록 어긋나던 일이 없다. 그림에 붙인 획과 예전 획은 그대로.
@@ -269,6 +270,16 @@
     return out;
   }
   /* 화면의 한 점 아래에서 필기를 붙일 곳 → { el, key, r } (없으면 null). r = 좌표의 기준 네모 */
+  /* v127: 붙박이 머리·띠, 붙박이 칸(position:sticky), 스스로 스크롤하는 칸 안에 들어 있는가 — 화면 맞추기의 기준으로 삼지 않으려고 */
+  function inBox(el) {
+    var sc = scopeEl(), p, cs;
+    for (p = el; p && p !== sc && p !== document.body && p !== document.documentElement; p = p.parentElement) {
+      if (p._inkBar) return true;
+      cs = getComputedStyle(p);
+      if (cs.position === "sticky" || cs.position === "fixed" || ((cs.overflowY === "auto" || cs.overflowY === "scroll") && p.scrollHeight > p.clientHeight + 2)) return true;
+    }
+    return false;
+  }
   function anchorAt(x, y) {
     if (!svg) return null;
     svg.style.pointerEvents = "none"; if (live) live.style.display = "none";
@@ -632,15 +643,34 @@
     /* v125: 수업에서 화면 맞추기 — [붙인 곳 열쇠, 그 안에서의 높이(1000 = 기준 너비), 화면 높이에서의 비율] */
     viewAnchor: function () {
       if (!svg) return null;
-      var top = 0, vh = innerHeight, cx, fr = [0.3, 0.5, 0.18, 0.7], i, A, p, bad;
-      if (host) { var g = hostGeo(); top = g.T; vh = g.hh; cx = g.ox + g.w / 2; }
-      else { var mr = main && main !== document.body ? main.getBoundingClientRect() : null; cx = mr && mr.width > 40 ? mr.left + mr.width / 2 : document.documentElement.clientWidth / 2; }
-      for (i = 0; i < fr.length; i++) {
-        A = anchorAt(cx, top + vh * fr[i]); if (!A) continue;
-        for (bad = false, p = A.el; p && p !== document.body; p = p.parentElement) if (p._inkBar) { bad = true; break; }   /* 붙박이 머리·띠에 든 것은 기준으로 삼지 않는다 */
-        if (!bad) return [A.key, Math.round((top + vh * fr[i] - A.r.top) / A.r.width * 1000), fr[i]];
+      var top = 0, vh = innerHeight, cx, w, fr = [0.3, 0.5, 0.18, 0.7], xs, i, j, A, y;
+      if (host) { var g = hostGeo(); top = g.T; vh = g.hh; cx = g.ox + g.w / 2; w = g.w; }
+      else { var mr = main && main !== document.body ? main.getBoundingClientRect() : null; w = mr && mr.width > 40 ? mr.width : document.documentElement.clientWidth; cx = mr && mr.width > 40 ? mr.left + mr.width / 2 : w / 2; }
+      xs = [cx, cx + w * 0.25, cx - w * 0.25];   /* v127: 가운데가 붙박이 지문 칸이면 오른쪽·왼쪽에서 찾는다 */
+      for (j = 0; j < xs.length; j++) for (i = 0; i < fr.length; i++) {
+        y = top + vh * fr[i]; A = anchorAt(xs[j], y); if (!A || inBox(A.el)) continue;   /* 붙박이 머리·띠, 붙박이 칸, 스스로 스크롤하는 칸에 든 것은 기준으로 삼지 않는다 */
+        return [A.key, Math.round((y - A.r.top) / A.r.width * 1000), fr[i]];
       }
       return null;
+    },
+    /* v127: 스스로 스크롤하는 칸(과제 화면의 지문 칸) 안에서 보이는 곳 — [붙인 곳 열쇠, 그 안에서의 높이, 칸 높이에서의 비율] */
+    boxAnchor: function (el) {
+      if (!svg || !el) return null;
+      var r = el.getBoundingClientRect(), fr = [0.3, 0.5, 0.15, 0.7], xs = [0.5, 0.3, 0.7], i, j, A, y;
+      if (r.width < 40 || r.height < 40) return null;
+      for (j = 0; j < xs.length; j++) for (i = 0; i < fr.length; i++) {
+        y = r.top + r.height * fr[i]; if (y < 0 || y > innerHeight) continue;
+        A = anchorAt(r.left + r.width * xs[j], y); if (!A || !el.contains(A.el)) continue;
+        return [A.key, Math.round((y - A.r.top) / A.r.width * 1000), fr[i]];
+      }
+      return null;
+    },
+    goBox: function (el, sa, smooth) {
+      if (!el || !sa || !sa[0] || !svg) return false;
+      var G = anchorGeo(String(sa[0]), {}); if (!G || !el.contains(G.e)) return false;
+      var r = el.getBoundingClientRect(), d = G.r.top + (+sa[1] || 0) / 1000 * G.r.width - (r.top + r.height * (+sa[2] || 0.3));
+      if (Math.abs(d) >= 2) el.scrollBy({ top: d, behavior: smooth && Math.abs(d) < 2400 ? "smooth" : "auto" });
+      return true;
     },
     goAnchor: function (sa, smooth) {
       if (!sa || !sa[0] || !svg) return false;
