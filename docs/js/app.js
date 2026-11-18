@@ -634,7 +634,7 @@
     var onlyNum = it.choiceCrops && !(it.choices && it.choices.length === 5);
     right += '<ul class="choices' + (onlyNum ? " hp-ch" : "") + '">';
     for (var n = 1; n <= 5; n++) right += '<li><button type="button" data-n="' + n + '"' + (onlyNum ? ' aria-label="' + n + '번"' : "") + '><span class="cn">' + CIRC[n] + "</span>" + (onlyNum ? "" : "<span>" + bank(it.choices[n - 1] || "") + "</span>") + "</button></li>";
-    right += '</ul><div class="verdict hidden"></div><div class="kq-tools"><button type="button" class="btn sm dark" data-grade disabled>채점하기</button><button class="btn sm line" data-exp>해설 보기</button><button class="btn sm line tv-only" data-showans>정답 보기</button></div><div class="explain hidden"></div>';
+    right += '</ul><div class="verdict hidden"></div><div class="kq-tools"><button type="button" class="btn sm dark" data-grade disabled>채점하기</button><button class="btn sm line" data-exp>해설 보기</button>' + bkBtn(it.key) + '<button class="btn sm line tv-only" data-showans>정답 보기</button></div><div class="explain hidden"></div>';
     return { two: !!left, html: left ? left + "<div>" + right + "</div>" : right };
   }
   function kqBody(it) {
@@ -656,7 +656,7 @@
     if (it.fig && it.fig.m === "ch") right += figImgs(it.fig.f, "선택지");
     right += '<ul class="choices">';
     for (var n = 1; n <= (it.basic ? it.choices.length : 5); n++) right += '<li><button type="button" data-n="' + n + '"><span class="cn">' + CIRC[n] + "</span><span>" + bank(it.choices[n - 1] != null ? it.choices[n - 1] : "") + "</span></button></li>";
-    right += '</ul><div class="verdict hidden"></div><div class="kq-tools"><button type="button" class="btn sm dark" data-grade disabled>채점하기</button><button class="btn sm line" data-exp>해설 보기</button>' + '<button class="btn sm line tv-only" data-showans>정답 보기</button>' + '</div><div class="explain hidden"></div>';
+    right += '</ul><div class="verdict hidden"></div><div class="kq-tools"><button type="button" class="btn sm dark" data-grade disabled>채점하기</button><button class="btn sm line" data-exp>해설 보기</button>' + bkBtn(it.key) + '' + '<button class="btn sm line tv-only" data-showans>정답 보기</button>' + '</div><div class="explain hidden"></div>';
     return { two: !!left, html: left ? left + "<div>" + right + "</div>" : right };
   }
   function fillHp(code) {
@@ -1072,6 +1072,111 @@
         f.keys.map(function (k) { return kqSummary(Kichul.item(k)).replace('<details class="kq"', '<details class="kq hp-exam no-p" open'); }).join("") + "</div></section>");
     }).catch(function (e) { toast(e.message); });
     return notFound();
+  }
+
+  /* ───────── v132: 담아서 모아 풀기 ─────────
+     문항 아래 '＋ 담기'로 여러 회차·주제의 문항을 모은다(이 기기에, 아이디마다 따로). 아래 띠의 '모아 풀기'를 누르면 한 화면에서 풀고,
+     답을 모두 고른 뒤 맨 아래 '채점하기'를 눌러야 채점된다(다른 단계의 모아 풀기와 같다). 같은 지문의 문항은 지문 옆에 모은다 */
+  function bkKey() { return "kme.bk:" + ((window.KFAV && KFAV.user()) || "_"); }
+  function bkLoad() { try { var a = JSON.parse(localStorage.getItem(bkKey()) || "[]"); return Array.isArray(a) ? a : []; } catch (e) { return []; } }
+  var BK = bkLoad(), bkUser = bkKey(), bkBar = null, bkArm = 0;
+  function bkSave() { try { localStorage.setItem(bkKey(), JSON.stringify(BK)); } catch (e) {} }
+  function bkBtn(key) { var on = BK.indexOf(key) >= 0; return '<button type="button" class="btn sm line bk1' + (on ? " on" : "") + '" data-bk="' + esc(key) + '" title="담아 두면 여러 문항을 한 화면에서 모아 풉니다">' + (on ? "✓ 담음" : "＋ 담기") + "</button>"; }
+  function bkPaint() {
+    if (bkKey() !== bkUser) { bkUser = bkKey(); BK = bkLoad(); }   /* 아이디가 바뀌면 그 아이디의 것 */
+    document.querySelectorAll("[data-bk]").forEach(function (b) { var on = BK.indexOf(b.getAttribute("data-bk")) >= 0, t = on ? "✓ 담음" : "＋ 담기"; if (b.textContent !== t) b.textContent = t; b.classList.toggle("on", on); });
+    if (!bkBar) {
+      bkBar = document.createElement("div"); bkBar.className = "bk1-bar"; bkBar.setAttribute("role", "region"); bkBar.setAttribute("aria-label", "담은 문항");
+      bkBar.innerHTML = '<span>담은 문항 <b id="bk1N">0</b>개</span><a href="#/set">모아 풀기</a><button type="button" id="bk1X">비우기</button>';
+      document.body.appendChild(bkBar);
+      bkBar.querySelector("#bk1X").onclick = function () { var x = this; if (bkArm && Date.now() - bkArm < 3000) { BK = []; bkSave(); bkArm = 0; x.textContent = "비우기"; bkPaint(); return; } bkArm = Date.now(); x.textContent = "한 번 더 누르면 비웁니다"; setTimeout(function () { if (bkArm) { bkArm = 0; x.textContent = "비우기"; } }, 3000); };
+    }
+    bkBar.querySelector("#bk1N").textContent = BK.length;
+    bkBar.classList.toggle("show", BK.length > 0 && !/^#\/set/.test(location.hash));
+  }
+  document.addEventListener("click", function (e) {
+    var b = e.target.closest && e.target.closest("[data-bk]"); if (!b) return;
+    var k = b.getAttribute("data-bk"), i = BK.indexOf(k); if (i >= 0) BK.splice(i, 1); else BK.push(k);
+    bkSave(); bkPaint();
+  });
+  window.addEventListener("hashchange", function () { setTimeout(bkPaint, 0); });
+  window.addEventListener("load", function () { setTimeout(bkPaint, 600); });
+  (function () {
+    var c = document.createElement("style"); c.id = "v132-set";
+    c.textContent =
+      ".btn.bk1.on{color:var(--brand,#2F4F7F);border-color:var(--brand,#2F4F7F);background:var(--brand-soft,#ECEEF1);font-weight:700}" +
+      ".bk1-bar{position:fixed;left:50%;bottom:20px;transform:translate(-50%,160%);z-index:60;display:flex;align-items:center;gap:12px;padding:9px 10px 9px 20px;border-radius:999px;background:rgba(38,38,37,.94);color:#fff;box-shadow:0 14px 34px rgba(0,0,0,.22);transition:transform .4s cubic-bezier(.2,.7,.2,1);font-size:14.5px;font-weight:600;white-space:nowrap}" +
+      ".bk1-bar.show{transform:translate(-50%,0)}.bk1-bar b{font-variant-numeric:tabular-nums}" +
+      ".bk1-bar a,.bk1-bar button{border:0;border-radius:999px;padding:8px 16px;background:#fff;color:#1d1d1f;font:inherit;font-weight:700;font-size:14px;cursor:pointer;text-decoration:none}" +
+      ".bk1-bar button{background:transparent;color:#fff;border:1px solid rgba(255,255,255,.45);font-weight:500}" +
+      "@media (max-width:760px){.bk1-bar{bottom:84px;gap:8px;padding:8px 8px 8px 16px;font-size:13.5px}.bk1-bar a,.bk1-bar button{padding:7px 12px;font-size:13px}}" +
+      ".set-run .kq [data-grade]{display:none}" +
+      ".set-foot{position:sticky;bottom:0;z-index:5;display:flex;justify-content:center;align-items:center;gap:12px;flex-wrap:wrap;margin-top:22px;padding:12px 0;background:var(--bg,#FEFEFD);border-top:1px solid var(--line,#E7E7E4);font-size:14.5px;color:var(--text-sub,#62625E)}" +
+      ".set-foot b{color:var(--text,#262625)}" +
+      "@media print{.bk1-bar,.set-foot{display:none!important}}";
+    document.head.appendChild(c);
+  })();
+  function viewSet() {
+    document.title = "모아 풀기 · 국어의 모든 것";
+    bkPaint();
+    var keys = BK.slice(), q = function (pr) { return pr.then(null, function () { return null; }); }, need = [];
+    var head = function (sub) { return '<main class="wrap set-run"><div class="crumbs"><a href="#/">홈</a><i>›</i>모아 풀기</div><h1 class="title">모아 풀기</h1><p class="sub">' + sub + "</p>"; };
+    if (!keys.length) return h(shell("", head("여러 문항을 모아 한 화면에서 푸는 곳입니다.") + '<div class="fav-empty"><b>담은 문항이 없습니다.</b>문항 아래의 ‘＋ 담기’를 누르면 여기에 모입니다.</div></main>'));
+    h(shell("", head(keys.length + "문항") + '<div class="kq-empty">불러오는 중…</div></main>'));
+    var hk = keys.filter(isHpKey);
+    if (keys.some(isBasicKey)) need.push(q(loadBasic()));
+    if (hk.length) need.push(q(HP.load().then(function () { return HP.loadFor(hk); })));
+    if (keys.some(function (k) { return !isBasicKey(k) && !isHpKey(k); })) need.push(q(Kichul.load()));
+    Promise.all(need).then(function () {
+      if (!/^#\/set/.test(location.hash)) return;
+      /* 같은 지문의 문항을 한 묶음으로(처음 나온 자리에 모은다) */
+      var segs = [], byP = {};
+      keys.forEach(function (k) {
+        var it = null, pk = null, kind = "";
+        try { if (isBasicKey(k)) { it = window.BASIC ? basicItem(k) : null; kind = "b"; if (it && it.pid) pk = "b|" + it.pid; }
+          else if (isHpKey(k)) { it = HP.ready() ? HP.item(k) : null; kind = "h"; if (it && it.passage && !it.passage.isNote) pk = "h|" + it.passage.key; }
+          else { it = Kichul.ready() ? Kichul.item(k) : null; kind = "k"; if (it && it.passage && it.passage.key) pk = "k|" + it.passage.key; } } catch (e) { it = null; }
+        if (!it) return;
+        if (pk && byP[pk]) { byP[pk].items.push(it); return; }
+        var g = { pk: pk, kind: kind, items: [it] }; segs.push(g); if (pk) byP[pk] = g;
+      });
+      var n = segs.reduce(function (x, g) { return x + g.items.length; }, 0);
+      if (!n) return h(shell("", head("담은 문항") + '<div class="kq-empty">문항 자료를 불러오지 못했습니다.</div></main>'));
+      var html = head(n + "문항 · 답을 모두 고른 뒤 맨 아래 ‘채점하기’를 누르세요. 다 풀어야 채점됩니다.");
+      segs.forEach(function (g) {
+        var qs = g.items.map(function (it) {
+          if (it.basic) return basicSummary(it);
+          return kqSummary(it).replace('<details class="kq"', '<details class="kq ' + (g.pk ? (g.kind === "k" ? "hp-exam no-p" : "hp-exam") : "") + '" open');
+        }).join("");
+        if (!g.pk) { html += '<section class="hp-solo">' + qs + "</section>"; return; }
+        var left = "", it0 = g.items[0];
+        if (g.kind === "h") left = hpHead(it0.passage) + hpPassageHtml(it0.passage, it0.passage.range + "번 지문");
+        else if (g.kind === "b") { var bp = window.BASIC.passages[it0.pid]; left = '<div class="hp-ph fav"><span>' + esc(bp.title) + "</span>" + fav("hak", "basic:" + it0.pid) + '</div><div class="ptext' + (bp.poem ? " poem" : "") + '">' + bank(bp.text) + "</div>"; }
+        else { var P = it0.passage, ptxt = bankBr(P.text, P.brackets);
+          left = '<div class="hp-ph fav"><span>[' + esc(it0.range) + "] 지문</span>" + fav("sn", P.key) + "</div>" + (P.fig ? '<div class="pfig-bar"><span>원본 문제지 그림</span>' + (P.text ? '<button type="button" class="btn sm line" data-pfig>글자로 보기</button>' : "") + "</div>" +
+            '<div class="ptext pfig">' + figImgs(P.fig, it0.range + "번 지문") + "</div>" + (P.text ? '<div class="ptext hidden" data-ptext>' + ptxt + "</div>" : "") : '<div class="ptext">' + ptxt + "</div>"); }
+        html += '<section class="hp-set"><div class="hp-p pfig-wrap">' + left + '</div><div class="hp-items">' + qs + "</div></section>";
+      });
+      html += '<div class="set-foot"><span id="setNote"></span><button type="button" class="btn dark" id="setGo">채점하기</button></div></main>';
+      h(shell("", html)); bindPfig($app); bkPaint();
+      var ds = [].slice.call($app.querySelectorAll(".set-run .kq")), done = false, note = document.getElementById("setNote"), go = document.getElementById("setGo");
+      ds.forEach(function (d) { d.addEventListener("toggle", function () { if (d.open) openKq(d); }); d.open = true; openKq(d); });
+      var picked = function () { return ds.filter(function (d) { return d._sel; }).length; };
+      var say = function (t) { note.innerHTML = t || ("<b>" + picked() + "</b> / " + ds.length + " 골랐어요"); };
+      say();
+      $app.querySelector(".set-run").addEventListener("click", function (e) { if (!done && e.target.closest && e.target.closest(".choices button")) setTimeout(function () { say(); }, 0); });
+      go.onclick = function () {
+        if (done) { viewSet(); window.scrollTo(0, 0); return; }
+        var miss = ds.filter(function (d) { return !d._sel; });
+        if (miss.length) { say("아직 안 고른 문항 <b>" + miss.length + "</b>개 — 모두 골라야 채점돼요"); miss[0].scrollIntoView({ behavior: "smooth", block: "center" }); return; }
+        ds.forEach(function (d) { if (d._grade) d._grade(); });
+        var ok = ds.filter(function (d) { var v = d.querySelector(".verdict"); return v && v.classList.contains("o"); }).length, gr = ds.filter(function (d) { var v = d.querySelector(".verdict"); return v && (v.classList.contains("o") || v.classList.contains("x")); }).length;
+        if (!gr) { say("선생님이 정답을 공개하면 채점됩니다."); return; }
+        done = true; say("맞힌 문항 <b>" + ok + "</b> / " + ds.length); go.textContent = "다시 풀기"; go.className = "btn line";
+        var sub = $app.querySelector(".set-run .sub"); if (sub) sub.textContent = ds.length + "문항 · 맞힌 문항 " + ok + "개. 틀린 문항은 ‘해설 보기’로 확인하세요.";
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      };
+    });
   }
 
   /* ───────── v131: 오답 노트 ─────────
@@ -1967,6 +2072,7 @@
       case "basic": return viewBasic(p[1], p[2]);
       case "fav": return viewFav(p[1], p.slice(2).join("/"));
       case "wrong": return viewWrong();
+      case "set": return viewSet();
       case "account": return viewHome();
       default: return notFound();
     }
