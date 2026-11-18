@@ -723,7 +723,8 @@
     var b = d.querySelector(".kq-body"); if (b.innerHTML) return;
     var it = isBasicKey(d.dataset.key) ? basicItem(d.dataset.key) : isHpKey(d.dataset.key) ? HP.item(d.dataset.key) : Kichul.item(d.dataset.key);
     if (it.hp && d.classList.contains("hp-exam")) { it.passage = null; it.note = null; }
-    if (d.classList.contains("no-p")) it.passage = null;   /* v130: 즐겨찾기에서 연 평가원 기출 지문 */   /* 시험지 보기에서는 지문을 위에 한 번만 */
+    if (d.classList.contains("no-p")) it.passage = null;   /* v130: 즐겨찾기에서 연 평가원 기출 지문 */
+    if (d.classList.contains("with-p") && it.basic && it.pid && window.BASIC.passages[it.pid]) it.passage = { text: window.BASIC.passages[it.pid].text, brackets: [] };   /* v131: 오답 노트 */   /* 시험지 보기에서는 지문을 위에 한 번만 */
     var r = kqBody(it);
     b.className = "kq-body" + (r.two ? " two" : ""); b.innerHTML = r.html;
     /* v111: 번호를 누르면 고르기만 하고, '채점하기'를 눌러야 채점된다. 지난번에 고른 답은 다시 보여 주지 않는다 */
@@ -1073,6 +1074,34 @@
     return notFound();
   }
 
+  /* ───────── v131: 오답 노트 ─────────
+     채점해서 틀린 문항(progress.solved 의 ok=false)을 최근 것부터. 줄을 펼쳐 다시 풀어 맞히면 다음에 열 때 빠진다 */
+  function wrongKeys() { var S = progress.solved || {}; return Object.keys(S).filter(function (k) { return S[k] && !S[k].ok; }).sort(function (a, b) { return (S[b].t || 0) - (S[a].t || 0); }); }
+  function viewWrong() {
+    document.title = "오답 노트 · 국어의 모든 것";
+    var keys = wrongKeys(), MAX = 60, q = function (pr) { return pr.then(null, function () { return null; }); }, need = [];
+    var head = '<main class="wrap"><div class="crumbs"><a href="#/">홈</a><i>›</i><a href="#/my">내 학습</a><i>›</i>오답 노트</div><h1 class="title">오답 노트</h1><p class="sub">' +
+      (keys.length ? "틀린 문항 " + keys.length + "개 · 줄을 눌러 다시 풀어 보세요. 맞히면 빠집니다." : "틀린 문항이 모이는 곳입니다.") + "</p>";
+    if (!keys.length) return h(shell("my", head + '<div class="fav-empty"><b>틀린 문항이 없습니다.</b>문제를 풀다 틀리면 여기에 모입니다.</div></main>'));
+    h(shell("my", head + '<div class="kq-empty">불러오는 중…</div></main>'));
+    var show = keys.slice(0, MAX), hk = show.filter(isHpKey);
+    if (show.some(isBasicKey)) need.push(q(loadBasic()));
+    if (hk.length) need.push(q(HP.load().then(function () { return HP.loadFor(hk); })));
+    if (show.some(function (k) { return !isBasicKey(k) && !isHpKey(k); })) need.push(q(Kichul.load()));
+    Promise.all(need).then(function () {
+      if (!/^#\/wrong/.test(location.hash)) return;
+      var list = show.map(function (k) {
+        var it = null;
+        try { it = isBasicKey(k) ? (window.BASIC ? basicItem(k) : null) : isHpKey(k) ? (HP.ready() ? HP.item(k) : null) : (Kichul.ready() ? Kichul.item(k) : null); } catch (e) { it = null; }
+        if (!it) return "";
+        return it.basic ? basicSummary(it).replace('class="kq hp-exam" open', 'class="kq with-p"') : kqSummary(it);
+      }).join("");
+      h(shell("my", head + '<div class="kq-list">' + (list || '<div class="kq-empty">문항 자료를 불러오지 못했습니다.</div>') + "</div>" +
+        (keys.length > MAX ? '<p class="muted small" style="margin-top:10px">최근에 틀린 ' + MAX + "개만 보입니다. 맞히면 다음 문항이 올라옵니다.</p>" : "") + "</main>"));
+      $app.querySelectorAll(".kq").forEach(function (d) { d.addEventListener("toggle", function () { if (d.open) openKq(d); }); });
+    });
+  }
+
   /* ───────── 검색 ───────── */
   function viewSearch(q) {
     q = (q || "").trim(); document.title = "찾기: " + q;
@@ -1101,6 +1130,7 @@
       '<div class="stat"><div class="v" style="color:var(--basic)">' + lv.b + " · " + '<span style="color:var(--adv)">' + lv.a + "</span> · " + '<span style="color:var(--ext)">' + lv.e + '</span></div><div class="l">기본 · 심화 · 발전 완료</div></div>' +
       '<div class="stat"><div class="v">' + tried + '</div><div class="l">풀어 본 기출</div></div>' +
       '<div class="stat"><div class="v">' + (tried ? Math.round(ok / tried * 100) : 0) + '%</div><div class="l">기출 정답률</div></div></div>' +
+      '<p style="margin:16px 0 0"><a class="btn line" href="#/wrong">오답 노트 · 틀린 문항 ' + wrongKeys().length + '개</a></p>' +
       '<h2 class="h2">과목별 진도</h2><div class="scroll"><table class="tbl"><thead><tr><th>과목</th><th>구분</th><th class="n">주제</th><th style="width:40%">진도</th></tr></thead><tbody>' +
       K.SUBJECTS.filter(function (s) { return s.count; }).map(function (s) {
         var p = subjPct(s);
@@ -1936,6 +1966,7 @@
       case "hp": return p[2] ? viewHpExam(p[2]) : viewHpList(Number(p[1]) || 1);
       case "basic": return viewBasic(p[1], p[2]);
       case "fav": return viewFav(p[1], p.slice(2).join("/"));
+      case "wrong": return viewWrong();
       case "account": return viewHome();
       default: return notFound();
     }
