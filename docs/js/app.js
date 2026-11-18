@@ -113,7 +113,7 @@
   function shell(active, inner) {
     var u = user();
     if (V88) return shell88(active, inner);
-    var nav = [["home", "#/", "홈"], ["middle", "#/school/middle", "중학교"], ["common", "#/school/common", "고등 공통"], ["elective", "#/school/elective", "고등 선택"], ["standards", "#/standards", "성취기준"]];
+    var nav = [["home", "#/", "홈"], ["middle", "#/school/middle", "중학교"], ["common", "#/school/common", "고등 공통"], ["elective", "#/school/elective", "고등 선택"], ["standards", "#/standards", "성취기준"], ["fav", "#/fav", '즐겨찾기<span class="kfav-n" data-ns="hak sn">' + ((window.KFAV && KFAV.count("hak sn")) || "") + "</span>"]];
     if (T()) { nav.push(["share", "#/share", "내 활동 자료"]); nav.push(["teacher", "#/teacher", "교사 자료실"]); }
     else nav.push(["my", "#/my", "내 학습"]);
     return '<header class="topbar"><div class="board"><div class="topbar-in">' +
@@ -129,6 +129,7 @@
       [["middle", "#/school/middle", "중학교"], ["common", "#/school/common", "고등 공통"], ["elective", "#/school/elective", "고등 선택"], ["standards", "#/standards", "성취기준"]];
     if (V89 && (active === "common" || active === "elective")) active = "high";
     if (!V89) nav.unshift(["home", "#/", "처음"]);
+    nav.push(["fav", "#/fav", '즐겨찾기<span class="kfav-n" data-ns="hak sn">' + ((window.KFAV && KFAV.count("hak sn")) || "") + "</span>"]);   /* v130: 지문 즐겨찾기 */
     if (T()) { nav.push(["share", "#/share", V89 ? "활동" : "내 활동 자료"]); nav.push(["teacher", "#/teacher", V89 ? "자료실" : "교사 자료실"]); }
     else nav.push(["my", "#/my", "내 학습"]);
     return '<header class="gnb"><div class="inner">' +
@@ -609,6 +610,9 @@
       };
     });
   }
+  /* v130: 지문 즐겨찾기 — 별 단추(js/fav.js). 학력평가·기초학력 지문은 'hak', 평가원 기출 지문은 수능 화면과 같은 자리 'sn' */
+  function fav(ns, key, label) { return window.KFAV && key ? KFAV.btn(ns, key, label == null ? "즐겨찾기" : label) : ""; }
+  function hpHead(p) { return '<div class="hp-ph' + (p.isNote ? "" : " fav") + '"><span>' + (p.isNote ? "※ " : "[" + esc(p.range) + "] ") + esc(p.head) + "</span>" + (p.isNote ? "" : fav("hak", p.key)) + "</div>"; }
   function hpNoteHtml(n) {
     return '<div class="hp-note pfig-wrap"><div class="hp-ph">※ ' + esc(n.head) + "</div>" + hpPassageHtml(n, n.range + "번 자료") + "</div>";
   }
@@ -644,7 +648,7 @@
         '<div class="ptext pfig">' + figImgs(it.passage.fig, it.range + "번 지문") + "</div>" +
         (it.passage.text ? '<div class="ptext hidden" data-ptext>' + ptxt + "</div>" : "") :
         '<div class="ptext">' + ptxt + "</div>";
-      left = "<div>" + left + "</div>";
+      left = "<div>" + (it.passage.key ? '<div class="hp-ph fav"><span>[' + esc(it.range) + "] 지문</span>" + fav("sn", it.passage.key) + "</div>" : "") + left + "</div>";
     }
     right += '<p class="stem">' + bank(it.stem) + (it.score === 3 && !/3점/.test(it.stem) ? " [3점]" : "") + "</p>";
     if (it.fig && it.fig.m === "bogi") right += figImgs(it.fig.f, "보기");
@@ -685,7 +689,7 @@
   function openGrp(d) {
     var b = d.querySelector(".kq-body"); if (b.innerHTML) return;
     var keys = d.dataset.keys.split(","), p = HP.item(keys[0]).passage;
-    b.innerHTML = '<section class="hp-set in-grp"><div class="hp-p pfig-wrap"><div class="hp-ph">' + (p.isNote ? "※ " : "[" + esc(p.range) + "] ") + esc(p.head) + "</div>" + hpPassageHtml(p, p.range + "번 지문") + '</div><div class="hp-items">' +
+    b.innerHTML = '<section class="hp-set in-grp"><div class="hp-p pfig-wrap">' + hpHead(p) + hpPassageHtml(p, p.range + "번 지문") + '</div><div class="hp-items">' +
       hpItemsHtml(keys.map(HP.item)) + "</div></section>";
     bindPfig(b);
     b.querySelectorAll(".kq").forEach(function (x) { x.addEventListener("toggle", function () { if (x.open) openKq(x); }); openKq(x); });
@@ -718,7 +722,8 @@
     if (d.classList.contains("hp-grp")) return openGrp(d);
     var b = d.querySelector(".kq-body"); if (b.innerHTML) return;
     var it = isBasicKey(d.dataset.key) ? basicItem(d.dataset.key) : isHpKey(d.dataset.key) ? HP.item(d.dataset.key) : Kichul.item(d.dataset.key);
-    if (it.hp && d.classList.contains("hp-exam")) { it.passage = null; it.note = null; }   /* 시험지 보기에서는 지문을 위에 한 번만 */
+    if (it.hp && d.classList.contains("hp-exam")) { it.passage = null; it.note = null; }
+    if (d.classList.contains("no-p")) it.passage = null;   /* v130: 즐겨찾기에서 연 평가원 기출 지문 */   /* 시험지 보기에서는 지문을 위에 한 번만 */
     var r = kqBody(it);
     b.className = "kq-body" + (r.two ? " two" : ""); b.innerHTML = r.html;
     /* v111: 번호를 누르면 고르기만 하고, '채점하기'를 눌러야 채점된다. 지난번에 고른 답은 다시 보여 주지 않는다 */
@@ -871,7 +876,7 @@
         var html2 = head;
         segs.forEach(function (sg) {
           var q = sg.items.map(basicSummary).join("");
-          if (sg.pid) { var p = B.passages[sg.pid]; html2 += '<section class="hp-set"><div class="hp-p"><div class="hp-ph">' + esc(p.title) + '</div><div class="ptext' + (p.poem ? " poem" : "") + '">' + bank(p.text) + '</div></div><div class="hp-items">' + q + "</div></section>"; }
+          if (sg.pid) { var p = B.passages[sg.pid]; html2 += '<section class="hp-set"><div class="hp-p"><div class="hp-ph fav"><span>' + esc(p.title) + "</span>" + fav("hak", "basic:" + sg.pid) + '</div><div class="ptext' + (p.poem ? " poem" : "") + '">' + bank(p.text) + '</div></div><div class="hp-items">' + q + "</div></section>"; }
           else html2 += '<section class="hp-solo">' + q + "</section>";
         });
         h(shell("basic", html2 + basicNav(a, lv) + "</main>"));
@@ -884,7 +889,7 @@
         keys.forEach(function (k) { var it = HP.item(k), pk = it.passage ? it.passage.key : null; if (pk && byP[pk]) { byP[pk].items.push(it); return; } var g = { p: it.passage, items: [it] }; segs.push(g); if (pk) byP[pk] = g; });
         var html3 = head;
         segs.forEach(function (sg) {
-          html3 += sg.p ? '<section class="hp-set"><div class="hp-p pfig-wrap"><div class="hp-ph">' + (sg.p.isNote ? "※ " : "[" + esc(sg.p.range) + "] ") + esc(sg.p.head) + "</div>" + hpPassageHtml(sg.p, sg.p.range + "번 지문") + '</div><div class="hp-items">' + hpItemsHtml(sg.items) + "</div></section>" :
+          html3 += sg.p ? '<section class="hp-set"><div class="hp-p pfig-wrap">' + hpHead(sg.p) + hpPassageHtml(sg.p, sg.p.range + "번 지문") + '</div><div class="hp-items">' + hpItemsHtml(sg.items) + "</div></section>" :
             '<section class="hp-solo">' + hpItemsHtml(sg.items) + "</section>";
         });
         h(shell("basic", html3 + basicNav(a, lv) + "</main>"));
@@ -943,13 +948,129 @@
       });
       segs.forEach(function (sg) {
         var q = sg.p && sg.p.isNote ? sg.items.map(function (it) { return kqSummary(it).replace('<details class="kq"', '<details class="kq hp-exam" open'); }).join("") : hpItemsHtml(sg.items);
-        html += sg.p ? '<section class="hp-set"><div class="hp-p pfig-wrap"><div class="hp-ph">' + (sg.p.isNote ? "※ " : "[" + esc(sg.p.range) + "] ") + esc(sg.p.head) + "</div>" + hpPassageHtml(sg.p, sg.p.range + "번 지문") + '</div><div class="hp-items">' + q + "</div></section>" :
+        html += sg.p ? '<section class="hp-set"><div class="hp-p pfig-wrap">' + hpHead(sg.p) + hpPassageHtml(sg.p, sg.p.range + "번 지문") + '</div><div class="hp-items">' + q + "</div></section>" :
           '<section class="hp-solo">' + q + "</section>";
       });
       h(shell("high", html + "</main>"));
       bindPfig($app);
       $app.querySelectorAll(".kq").forEach(function (d) { d.addEventListener("toggle", function () { if (d.open) openKq(d); }); openKq(d); });
     }).catch(function (er) { toast(er.message); });
+  }
+
+
+  /* ───────── v130: 지문 즐겨찾기 ─────────
+     별(☆)을 누른 지문이 모인다. 줄을 누르면 그 지문과 문항만 열린다.
+     갈래: hak = 학력평가 지문(회차||영역||범위)·기초학력 지문(basic:지문 이름), sn = 평가원 기출 지문(수능 화면의 즐겨찾기와 같은 자리) */
+  var favBy = "new";
+  (function () {
+    var c = document.createElement("style"); c.id = "v130-fav";
+    c.textContent =
+      ".hp-ph.fav{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}.hp-ph.fav>span{min-width:0}.hp-ph .kfav{font-weight:500}" +
+      ".kfav-n{display:inline-block;margin-left:6px;min-width:18px;padding:0 6px;border-radius:999px;background:var(--brand,#2F4F7F);color:#fff;font-size:11px;font-weight:700;line-height:18px;text-align:center;vertical-align:1px}" +
+      ".favl{list-style:none;margin:18px 0 0;padding:0;border-top:1px solid var(--line,#E7E7E4)}" +
+      ".favl li{display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--line,#E7E7E4)}" +
+      ".favr{flex:1;min-width:0;display:grid;grid-template-columns:132px 64px minmax(0,1fr);gap:12px;align-items:center;padding:14px 8px;color:inherit;text-decoration:none}" +
+      ".favr:hover{background:var(--paper-2,#F5F5F3)}" +
+      ".favr .fa b{display:block;font-size:14.5px;font-weight:700}.favr .fa small{display:block;font-size:12.5px;color:var(--text-faint,#9A9A95)}" +
+      ".favr .fb{font-size:13.5px;color:var(--brand,#2F4F7F);white-space:nowrap}" +
+      ".favr .fc b{display:block;font-size:15px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.favr .fc small{display:block;font-size:12.5px;color:var(--text-faint,#9A9A95);margin-top:2px}" +
+      ".favl .kfav{margin-right:6px}" +
+      ".fav-top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap}.fav-top .title{margin-bottom:6px}" +
+      ".fav-sort{font-size:13px;color:var(--text-sub,#62625E);display:flex;align-items:center;gap:6px;white-space:nowrap}.fav-sort select{font:inherit;padding:6px 10px;border:1px solid var(--line,#E7E7E4);border-radius:10px;background:var(--surface,#fff);color:inherit}" +
+      ".fav-empty{margin-top:18px;padding:26px 18px;border:1px solid var(--line,#E7E7E4);color:var(--text-sub,#62625E);font-size:14.5px;line-height:1.7}.fav-empty b{display:block;color:var(--text,#262625);font-size:16px;margin-bottom:4px}" +
+      ".fav-one{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:0 0 4px}" +
+      "@media (max-width:640px){.favr{grid-template-columns:minmax(0,1fr);gap:2px;padding:12px 6px}.favr .fa b,.favr .fa small{display:inline;margin-right:6px}}";
+    document.head.appendChild(c);
+    if (window.KFAV) KFAV.use("hak", "sn");
+    document.addEventListener("kfav:change", function () { if (/^#\/fav\/?$/.test(location.hash) && dataReady) favPaint(); });
+  })();
+  function favSnip(t) { t = plain(String(t || "")).replace(/<[^>]*>/g, " ").replace(/[-]/g, "").replace(/\s+/g, " ").trim(); return t.length > 64 ? t.slice(0, 64) + "…" : t; }
+  function favWhen(ns, k) { var d = new Date(KFAV.at(ns, k)); return (d.getMonth() + 1) + "." + d.getDate() + ". 넣음"; }
+  function basicWhere(pid) {   /* 기초학력 지문이 쓰인 영역·단계 */
+    var B = window.BASIC, out = null;
+    (B.areas || []).forEach(function (a) { ["1", "2"].forEach(function (lv) { (a.sets[lv] || []).forEach(function (k) { if (!out && B.items[k] && B.items[k].p === pid) out = { a: a, lv: Number(lv) }; }); }); });
+    return out;
+  }
+  function favRows() {
+    var out = [];
+    KFAV.keys("hak").forEach(function (k) {
+      if (k.indexOf("basic:") === 0) {
+        var bp = window.BASIC && BASIC.passages[k.slice(6)], w = bp && basicWhere(k.slice(6)); if (!bp || !w) return;
+        out.push({ ns: "hak", k: k, a: "기초학력", a2: w.a.name + " " + w.lv + "단계", b: "", t: bp.title, s: favSnip(bp.text), rank: 0 }); return;
+      }
+      var e = HP.ready() && HP.exam(k.split("||")[0]); if (!e || !HP.has(k)) return;
+      var p = HP.passage(k), ks = HP.itemsOf(k), i0 = ks.length ? HP.item(ks[0]) : null, ar = k.split("||")[1];
+      out.push({ ns: "hak", k: k, a: e.y + "년 " + e.m + "월", a2: "고" + e.g + " 학력평가", b: "[" + p.range + "]", t: favSnip(p.text) || p.head, s: [(i0 && i0.kind) || (ar === "국어" || ar === "공통" ? "" : ar), "문항 " + ks.length + "개"].filter(Boolean).join(" · "), rank: e.y * 100 + e.m });
+    });
+    KFAV.keys("sn").forEach(function (k) {
+      var f = Kichul.ready() ? Kichul.passageInfo(k) : null; if (!f) return;
+      out.push({ ns: "sn", k: k, a: f.exam.replace("학년도 ", " ").replace("대학수학능력시험", "수능").replace("모의평가", "모평"), a2: "평가원 기출", b: "[" + f.range + "]", t: f.topic || (f.area + " 지문"), s: [f.area, (f.works || []).join(" / "), "문항 " + f.keys.length + "개"].filter(Boolean).join(" · "), rank: f.rank });
+    });
+    if (favBy === "exam") out.sort(function (x, y) { return y.rank - x.rank || (x.k < y.k ? -1 : 1); });
+    else out.sort(function (x, y) { return KFAV.at(y.ns, y.k) - KFAV.at(x.ns, x.k); });
+    return out;
+  }
+  function favPaint(loading) {
+    var rows = favRows(), n = KFAV.count("hak sn");
+    var html = '<main class="wrap"><div class="crumbs"><a href="#/">홈</a><i>›</i>지문 즐겨찾기</div>' +
+      '<div class="fav-top"><div><h1 class="title">지문 즐겨찾기</h1><p class="sub">' + (rows.length ? "지문 " + rows.length + "개 · 줄을 누르면 그 지문과 문항만 열립니다." : "자주 볼 지문을 모아 두는 곳입니다.") + "</p></div>" +
+      (rows.length > 1 ? '<label class="fav-sort">차례 <select id="favBy"><option value="new"' + (favBy === "new" ? " selected" : "") + '>넣은 순</option><option value="exam"' + (favBy === "exam" ? " selected" : "") + ">최신 시험 순</option></select></label>" : "") + "</div>";
+    if (rows.length) html += '<ul class="favl">' + rows.map(function (r) {
+      return '<li><a class="favr" href="#/fav/' + r.ns + "/" + encodeURIComponent(r.k) + '" title="이 지문과 문항만 엽니다"><span class="fa"><b>' + esc(r.a) + "</b><small>" + esc(r.a2) + '</small></span><span class="fb">' + esc(r.b) + '</span><span class="fc"><b>' + esc(r.t) + "</b><small>" + esc([r.s, favWhen(r.ns, r.k)].filter(Boolean).join(" · ")) + "</small></span></a>" + KFAV.btn(r.ns, r.k, "", "ico") + "</li>";
+    }).join("") + "</ul>";
+    else html += loading && n ? '<div class="kq-empty">불러오는 중…</div>' :
+      '<div class="fav-empty"><b>아직 즐겨찾기한 지문이 없습니다.</b>학력평가 시험지나 주제 학습·기초학력 문제의 지문 머리에 있는 ‘☆ 즐겨찾기’를 누르면 여기에 모입니다.</div>';
+    html += '<p class="kfav-note">' + esc(KFAV.note("hak sn")) + "</p></main>";
+    h(shell("fav", html));
+    var sel = document.getElementById("favBy"); if (sel) sel.onchange = function () { favBy = sel.value; favPaint(); };
+  }
+  function viewFav(ns, key) {
+    if (!window.KFAV) return notFound();
+    if (ns && key) return viewFavOne(ns, key);
+    document.title = "지문 즐겨찾기 · 국어의 모든 것";
+    var hk = KFAV.keys("hak"), need = [], q = function (p) { return p.then(null, function () { return null; }); };
+    need.push(q(HP.load().then(function () { return HP.loadFor(hk.filter(function (k) { return k.indexOf("basic:") !== 0 && HP.has(k); })); })));
+    if (hk.some(function (k) { return k.indexOf("basic:") === 0; })) need.push(q(loadBasic()));
+    if (KFAV.keys("sn").length) need.push(q(Kichul.load()));
+    favPaint(true);
+    Promise.all(need).then(function () { if (/^#\/fav\/?$/.test(location.hash)) favPaint(); });
+  }
+  /* 그 지문과 문항만 */
+  function viewFavOne(ns, key) {
+    var head = function (name, sub) {
+      return '<main class="wrap"><div class="crumbs"><a href="#/">홈</a><i>›</i><a href="#/fav">지문 즐겨찾기</a><i>›</i>' + esc(name) + '</div><h1 class="title">' + esc(name) + '</h1>' +
+        '<div class="fav-one"><a class="btn sm line" href="#/fav">← 즐겨찾기로</a>' + (sub || "") + "</div>";
+    };
+    var done = function (active, html) {
+      h(shell(active, html + "</main>")); bindPfig($app);
+      $app.querySelectorAll(".kq").forEach(function (d) { d.addEventListener("toggle", function () { if (d.open) openKq(d); }); openKq(d); });
+    };
+    h(shell("fav", '<main class="wrap"><div class="loading">불러오는 중…</div></main>'));
+    if (ns === "hak" && key.indexOf("basic:") === 0) return loadBasic().then(function () {
+      var B = window.BASIC, pid = key.slice(6), p = B.passages[pid], w = p && basicWhere(pid); if (!p || !w) return notFound();
+      document.title = p.title + " · 지문 즐겨찾기";
+      var its = (w.a.sets[String(w.lv)] || []).map(basicItem).filter(function (it) { return it && it.pid === pid; });
+      done("fav", head(p.title, '<a class="btn sm line" href="#/basic/' + w.a.id + "/" + w.lv + '">' + esc(w.a.name) + " " + w.lv + "단계 전체 보기</a>") +
+        '<section class="hp-set"><div class="hp-p"><div class="hp-ph fav"><span>' + esc(p.title) + "</span>" + fav("hak", key) + '</div><div class="ptext' + (p.poem ? " poem" : "") + '">' + bank(p.text) + '</div></div><div class="hp-items">' + its.map(basicSummary).join("") + "</div></section>");
+    }).catch(function (e) { toast(e.message); });
+    if (ns === "hak") return HP.load().then(function () { return HP.has(key) ? HP.loadText(key.split("||")[0]) : null; }).then(function () {
+      if (!HP.has(key)) return notFound();
+      var e = HP.exam(key.split("||")[0]), p = HP.passage(key), ar = key.split("||")[1], name = HP.name(e) + " [" + p.range + "]";
+      document.title = name + " · 지문 즐겨찾기";
+      done("fav", head(name, '<a class="btn sm line" href="#/hp/' + e.g + "/" + e.id + (e.g === 3 && (ar === "언어와 매체" || ar === "화법과 작문") ? "?s=" + (ar === "언어와 매체" ? "언매" : "화작") : "") + '">이 회차 전체 보기</a>') +
+        '<section class="hp-set"><div class="hp-p pfig-wrap">' + hpHead(p) + hpPassageHtml(p, p.range + "번 지문") + '</div><div class="hp-items">' + hpItemsHtml(HP.itemsOf(key).map(HP.item)) + "</div></section>");
+    }).catch(function (er) { toast(er.message); });
+    if (ns === "sn") return Kichul.load().then(function () {
+      var f = Kichul.passageInfo(key); if (!f) return notFound();
+      var name = f.exam.replace("대학수학능력시험", "수능") + " [" + f.range + "]", it0 = Kichul.item(f.keys[0]), P = it0.passage, ptxt = bankBr(P.text, P.brackets);
+      document.title = name + " · 지문 즐겨찾기";
+      var left = P.fig ? '<div class="pfig-bar"><span>원본 문제지 그림</span>' + (P.text ? '<button type="button" class="btn sm line" data-pfig>글자로 보기</button>' : "") + "</div>" +
+        '<div class="ptext pfig">' + figImgs(P.fig, f.range + "번 지문") + "</div>" + (P.text ? '<div class="ptext hidden" data-ptext>' + ptxt + "</div>" : "") : '<div class="ptext">' + ptxt + "</div>";
+      done("fav", head(name, '<a class="btn sm line" href="/suneung-korean/suneung.html">수능 화면으로</a>') +
+        '<section class="hp-set"><div class="hp-p pfig-wrap"><div class="hp-ph fav"><span>[' + esc(f.range) + "] " + esc(f.topic || "지문") + "</span>" + fav("sn", key) + "</div>" + left + '</div><div class="hp-items">' +
+        f.keys.map(function (k) { return kqSummary(Kichul.item(k)).replace('<details class="kq"', '<details class="kq hp-exam no-p" open'); }).join("") + "</div></section>");
+    }).catch(function (e) { toast(e.message); });
+    return notFound();
   }
 
   /* ───────── 검색 ───────── */
@@ -1814,6 +1935,7 @@
       case "compare": return viewCompare(p[1]);
       case "hp": return p[2] ? viewHpExam(p[2]) : viewHpList(Number(p[1]) || 1);
       case "basic": return viewBasic(p[1], p[2]);
+      case "fav": return viewFav(p[1], p.slice(2).join("/"));
       case "account": return viewHome();
       default: return notFound();
     }

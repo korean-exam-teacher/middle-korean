@@ -8,7 +8,7 @@
  */
 (function () {
   var BASE = "data/hakpyeong/", VER = window.HP_VER || "95";
-  var loading = null, expLoading = null, D = null, EX = {}, TEXT = {}, tLoading = {}, tWait = {};
+  var loading = null, expLoading = null, D = null, EX = {}, TEXT = {}, tLoading = {}, tWait = {}, byP = null;
   function script(src) {
     return new Promise(function (res, rej) {
       var s = document.createElement("script"); s.src = src; s.onload = res;
@@ -76,6 +76,13 @@
     /* 성취기준 하나의 학력평가 문항: 단계(advanced·extension)별 키 */
     forStd: function (code, level) { var m = D && D.map[code]; return m ? (m[level] || []) : []; },
     count: function (code) { var m = D && D.map[code]; return m ? m.advanced.length + m.extension.length : 0; },
-    name: examName
+    name: examName,
+    /* v130(지문 즐겨찾기): 그 지문이 있는가 · 그 지문에 딸린 문항 키(번호순) */
+    has: function (pkey) { return !!(D && D.passages[pkey]); },
+    itemsOf: function (pkey) {
+      if (!D) return [];
+      if (!byP) { byP = {}; Object.keys(D.items).forEach(function (k) { var x = D.items[k].p; if (x) (byP[x] = byP[x] || []).push(k); }); Object.keys(byP).forEach(function (x) { byP[x].sort(function (a, b) { return D.items[a].n - D.items[b].n; }); }); }
+      return byP[pkey] || [];
+    }
   };
 })();

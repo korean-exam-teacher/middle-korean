@@ -6,7 +6,7 @@
  */
 (function () {
   var loading = null, pool = null, byKey = {}, passages = {}, choices = {}, figs = { i: {}, p: {} };
-  var expLoading = null;
+  var expLoading = null, byPas = null;
   var cache = {};
 
   /* 교육과정 영역 → 문제은행 유형갈래 */
@@ -166,7 +166,7 @@
       stem: it["발문"], bogi: it["보기"], choices: choices[key] || [], answer: Number(it["정답"]), score: Number(it["배점"]) || 2,
       group: it["유형묶음"], fig: fi || null,
       bogiBrackets: (window.KB_BRACKETS || {})["보기:" + key] || [],
-      passage: r.pkey ? { text: passages[r.pkey] || "", fig: pf ? pf.f : null, brackets: (window.KB_BRACKETS || {})[r.pkey] || [] } : null
+      passage: r.pkey ? { key: r.pkey, text: passages[r.pkey] || "", fig: pf ? pf.f : null, brackets: (window.KB_BRACKETS || {})[r.pkey] || [] } : null
     };
   }
 
@@ -175,6 +175,13 @@
     /* 교사용: 2022 성취기준의 연결 근거(2015 성취기준 목록)와 후보 문항 수 */
     sources: function (code) { return src2022[code] || []; },
     candidates: function (code) { return Object.keys(by2022[code] || {}).length; },
-    count2015: function (code) { return (by2015[code] || []).length; }
+    count2015: function (code) { return (by2015[code] || []).length; },
+    /* v130(지문 즐겨찾기): 지문 키(회차||영역||지문 범위) → { keys: 문항 키(번호순), exam, range, area, topic, works } */
+    passageInfo: function (pkey) {
+      if (!pool) return null;
+      if (!byPas) { byPas = {}; pool.forEach(function (r) { if (r.pkey) (byPas[r.pkey] = byPas[r.pkey] || []).push(r); }); Object.keys(byPas).forEach(function (k) { byPas[k].sort(function (a, b) { return Number(a.it["문항번호"]) - Number(b.it["문항번호"]); }); }); }
+      var l = byPas[pkey]; if (!l || !l.length) return null; var it = l[0].it;
+      return { keys: l.map(function (r) { return r.key; }), exam: it["명칭"], range: it["지문범위"], area: it["영역"], topic: it["소재"] || "", works: it["작품"] || [], rank: l[0].rank };
+    }
   };
 })();
