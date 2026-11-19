@@ -749,7 +749,7 @@
       var v = b.querySelector(".verdict"); v.className = "verdict " + (ok ? "o" : "x");
       v.textContent = ok ? "정답입니다. (" + CIRC[it.answer] + ")" : "아쉬워요. 정답은 " + CIRC[it.answer] + "입니다. 해설을 확인해 보세요.";
       if (!silent && !T()) {
-        progress.solved[it.key] = { ok: ok, n: n, t: Date.now() }; saveProgress();
+        progress.solved[it.key] = { ok: ok, n: n, t: Date.now() }; saveProgress(); if (wrOnId()) KFAV.put(WRNS, it.key, !ok, progress.solved[it.key].t);
         if (window.KMA) KMA.record("hak:" + it.key, ok, (isBasicKey(it.key) ? "기초학력" : it.hp ? "학력평가" : "평가원 기출") + (it.area ? "·" + it.area : ""), n);
         var res = d.querySelector("summary .res"); res.className = "res " + (ok ? "o" : "x"); res.textContent = ok ? "맞힘" : "틀림";
       }
@@ -1077,10 +1077,24 @@
   /* ───────── v132: 담아서 모아 풀기 ─────────
      문항 아래 '＋ 담기'로 여러 회차·주제의 문항을 모은다(이 기기에, 아이디마다 따로). 아래 띠의 '모아 풀기'를 누르면 한 화면에서 풀고,
      답을 모두 고른 뒤 맨 아래 '채점하기'를 눌러야 채점된다(다른 단계의 모아 풀기와 같다). 같은 지문의 문항은 지문 옆에 모은다 */
+  /* v135: 아이디에 저장 — KFAV(fav.js) 틀로 users/{uid}.fav.mkbk(차례 = 담은 차례). 이 기기에 담아 둔 것은 처음 열 때 아이디로 옮긴다 */
+  var BKNS = "mkbk";
+  function bkOnId() { return !!(window.KFAV && KFAV.user() && KFAV.put); }
   function bkKey() { return "kme.bk:" + ((window.KFAV && KFAV.user()) || "_"); }
-  function bkLoad() { try { var a = JSON.parse(localStorage.getItem(bkKey()) || "[]"); return Array.isArray(a) ? a : []; } catch (e) { return []; } }
+  function bkLoad() {
+    var a; try { a = JSON.parse(localStorage.getItem(bkKey()) || "[]"); a = Array.isArray(a) ? a : []; } catch (e) { a = []; }
+    if (!bkOnId()) return a;
+    KFAV.use(BKNS);
+    if (a.length) { KFAV.order(BKNS, KFAV.list(BKNS).concat(a.filter(function (k) { return !KFAV.has(BKNS, k); }))); try { localStorage.removeItem(bkKey()); } catch (e) {} }
+    return KFAV.list(BKNS);
+  }
   var BK = bkLoad(), bkUser = bkKey(), bkBar = null, bkArm = 0;
-  function bkSave() { try { localStorage.setItem(bkKey(), JSON.stringify(BK)); } catch (e) {} }
+  function bkSave() { if (bkOnId()) { KFAV.order(BKNS, BK); return; } try { localStorage.setItem(bkKey(), JSON.stringify(BK)); } catch (e) {} }
+  document.addEventListener("kfav:change", function (e) {
+    var ns = (e.detail && e.detail.ns) || ""; if (!bkOnId() || (ns && ns !== BKNS)) return;
+    var nb = KFAV.list(BKNS); if (nb.join("|") === BK.join("|")) return;
+    BK = nb; bkPaint(); if (/^#\/set/.test(location.hash)) route();
+  });
   function bkBtn(key) { var on = BK.indexOf(key) >= 0; return '<button type="button" class="btn sm line bk1' + (on ? " on" : "") + '" data-bk="' + esc(key) + '" title="담아 두면 여러 문항을 한 화면에서 모아 풉니다">' + (on ? "✓ 담음" : "＋ 담기") + "</button>"; }
   function bkPaint() {
     if (bkKey() !== bkUser) { bkUser = bkKey(); BK = bkLoad(); }   /* 아이디가 바뀌면 그 아이디의 것 */
@@ -1181,7 +1195,26 @@
 
   /* ───────── v131: 오답 노트 ─────────
      채점해서 틀린 문항(progress.solved 의 ok=false)을 최근 것부터. 줄을 펼쳐 다시 풀어 맞히면 다음에 열 때 빠진다 */
-  function wrongKeys() { var S = progress.solved || {}; return Object.keys(S).filter(function (k) { return S[k] && !S[k].ok; }).sort(function (a, b) { return (S[b].t || 0) - (S[a].t || 0); }); }
+  /* v135: 오답 노트를 아이디에 — users/{uid}.fav.mkwr { 문항 열쇠: 틀린 시각(+) / 맞힌 시각(−) }.
+     1단계의 풀이 기록(progress)은 아이디가 아니라 이 기기에 하나라서, 로그인해 있으면 오답 노트는 아이디의 목록에서 읽는다.
+     이 기기에 있던 예전 기록은 이 기기에서 처음 연 아이디로 한 번만 옮긴다(다른 학생에게 섞이지 않게) */
+  var WRNS = "mkwr", WRMIG = "kme.wrmig";
+  function wrOnId() { return !!(window.KFAV && KFAV.user() && KFAV.put); }
+  function wrSync() {
+    if (!wrOnId()) return;
+    KFAV.use(WRNS);
+    var S = progress.solved || {}, done = null; try { done = localStorage.getItem(WRMIG); } catch (e) {}
+    if (!done) {
+      KFAV.putMany(WRNS, Object.keys(S).filter(function (k) { return S[k] && S[k].t; }).map(function (k) { return [k, !S[k].ok, S[k].t]; }));
+      try { localStorage.setItem(WRMIG, KFAV.user()); } catch (e) {}
+    }
+  }
+  document.addEventListener("kfav:change", function (e) {
+    var ns = (e.detail && e.detail.ns) || ""; if (ns && ns !== WRNS) return;
+    if (/^#\/wrong/.test(location.hash) && dataReady) route();
+  });
+  function wrongKeys() { if (wrOnId()) return KFAV.keys(WRNS).sort(function (a, b) { return KFAV.at(WRNS, b) - KFAV.at(WRNS, a); });
+    var S = progress.solved || {}; return Object.keys(S).filter(function (k) { return S[k] && !S[k].ok; }).sort(function (a, b) { return (S[b].t || 0) - (S[a].t || 0); }); }
   function viewWrong() {
     document.title = "오답 노트 · 국어의 모든 것";
     var keys = wrongKeys(), MAX = 60, q = function (pr) { return pr.then(null, function () { return null; }); }, need = [];
@@ -2092,6 +2125,7 @@
     return Auth.loadProgress().then(function (p) {
       p = p || {};
       progress = { done: p.done || {}, recent: p.recent || [], solved: p.solved || {} };
+      wrSync();
     });
   }
   Auth.onChange(function () { route(); });
