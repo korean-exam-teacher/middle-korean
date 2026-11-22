@@ -38,16 +38,28 @@
 
   function load() {
     if (loading) return loading;
-    loading = Promise.all([remoteOr("data/kb.js", "data/kichul/bank.js"), script("data/kichul/brackets.js").catch(function () { window.KB_BRACKETS = {}; }),
+    /* v136: 새 회차는 덧붙임 파일(문제은행 data/kb_add.js)로 — kb.js(9MB)를 통째로 다시 올리지 않으려고. 못 받아도 예전 기출은 그대로 */
+    loading = Promise.all([remoteOr("data/kb.js", "data/kichul/bank.js").then(function () { if (BASE && figBase === BASE) return script(BASE + "data/kb_add.js?v=136").catch(function () { window.KB_ADD = null; }); }), script("data/kichul/brackets.js").catch(function () { window.KB_BRACKETS = {}; }),
       script("data/kichul/brackets-manual.js").catch(function () { window.KB_BRACKETS_MANUAL = {}; }),
       window.MAP2015 ? Promise.resolve() : script("data/mapping-2015.js")]).then(function () {
       /* 사람이 정한 범위가 자동 추출보다 우선(같은 표시면 덮어씀) */
       var M = window.KB_BRACKETS_MANUAL || {}, B = window.KB_BRACKETS = window.KB_BRACKETS || {};
+      var A = window.KB_ADD || null;
+      if (A && A.brackets) Object.keys(A.brackets).forEach(function (k) { if (!B[k]) B[k] = A.brackets[k]; });
       Object.keys(M).forEach(function (k) {
         var labs = M[k].map(function (x) { return x[0]; });
         B[k] = (B[k] || []).filter(function (x) { return labs.indexOf(x[0]) < 0; }).concat(M[k]);
       });
       var KB = window.KB;
+      if (A) {
+        var have = {};
+        KB.items.forEach(function (i) { have[i.exam_id + "||" + i["영역"] + "||" + i["문항번호"]] = 1; });
+        KB.items = KB.items.concat((A.items || []).filter(function (i) { return !have[i.exam_id + "||" + i["영역"] + "||" + i["문항번호"]]; }));
+        Object.assign(KB.passages, A.passages || {}); Object.assign(KB.choices, A.choices || {});
+        KB.figs = KB.figs || { i: {}, p: {} }; KB.figs.i = KB.figs.i || {}; KB.figs.p = KB.figs.p || {};
+        Object.assign(KB.figs.i, (A.figs || {}).i || {}); Object.assign(KB.figs.p, (A.figs || {}).p || {});
+        delete window.KB_ADD;
+      }
       passages = Object.assign({}, KB.passages, KB.passages2028 || {});
       choices = Object.assign({}, KB.choices, KB.choices2028 || {});
       figs = KB.figs || figs;
@@ -95,7 +107,9 @@
     });
   }
   function loadExplain() {
-    if (!expLoading) expLoading = remoteOr("data/kb_explain.js", "data/kichul/explain.js").then(function () { return window.KB_EXPLAIN.i || window.KB_EXPLAIN; });
+    if (!expLoading) expLoading = remoteOr("data/kb_explain.js", "data/kichul/explain.js")
+      .then(function () { if (BASE && figBase === BASE) return script(BASE + "data/kb_explain_add.js?v=136").catch(function () { window.KB_EXPLAIN_ADD = null; }); })
+      .then(function () { var E = window.KB_EXPLAIN.i || window.KB_EXPLAIN, X = window.KB_EXPLAIN_ADD; if (X && X.i) Object.assign(E, X.i); return E; });
     return expLoading;
   }
 
