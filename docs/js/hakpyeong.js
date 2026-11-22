@@ -7,7 +7,7 @@
  * 출처: 각 시·도 교육청 주관 전국연합학력평가 문제지·정답 및 해설(EBSi 제공)
  */
 (function () {
-  var BASE = "data/hakpyeong/", VER = window.HP_VER || "95";
+  var BASE = "data/hakpyeong/", VER = window.HP_VER || "137";
   var loading = null, expLoading = null, D = null, EX = {}, TEXT = {}, tLoading = {}, tWait = {}, byP = null;
   function script(src) {
     return new Promise(function (res, rej) {
@@ -38,7 +38,9 @@
     return Promise.all(Object.keys(es).map(loadText));
   }
   function loadExplain() {
-    if (!expLoading) expLoading = script(BASE + "explain.js?v=" + VER).then(function () { var E = window.HP_EXPLAIN; delete window.HP_EXPLAIN; return E; });
+    /* v137: 옛한글을 고친 해설은 덧붙임(explain_add.js)에서 덮어쓴다 — 못 받아도 예전 해설은 그대로 */
+    if (!expLoading) expLoading = script(BASE + "explain.js?v=" + VER).then(function () { return script(BASE + "explain_add.js?v=137").catch(function () { window.HP_EXPLAIN_ADD = null; }); })
+      .then(function () { var E = window.HP_EXPLAIN, X = window.HP_EXPLAIN_ADD; if (X) Object.keys(X).forEach(function (k) { E[k] = X[k]; }); delete window.HP_EXPLAIN; delete window.HP_EXPLAIN_ADD; return E; });
     return expLoading;
   }
   function crops(list, e) {
