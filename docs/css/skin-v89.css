@@ -10,8 +10,8 @@
   --rule:var(--line); --rule-2:#EFEFEC; --board:var(--brand); --board-2:var(--brand-strong);
   --chalk:#fff; --chalk-y:var(--brand); --chalk-p:#A44A3F; --chalk-b:var(--brand);
   --basic:#5B7F6B; --adv:#9C7A45; --ext:#A44A3F; --ok:#4E7A5E; --red:#A44A3F;
-  --sans:"OldHangulSans","Pretendard Variable","Pretendard","Noto Sans KR","Apple SD Gothic Neo","Malgun Gothic",sans-serif;
-  --serif:"Noto Serif KR","OhSerif","AppleMyungjo","Batang",serif;
+  --sans:"OldHangulSans","Pretendard Variable","Pretendard","Noto Sans KR","Noto Sans TC","Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+  --serif:"Noto Serif KR","Noto Serif TC","OhSerif","AppleMyungjo","Batang",serif;
   --hand:var(--sans);
 }
 body { background: var(--bg); color: var(--text); font-size: 16px; line-height: 1.75; font-weight: 400; -webkit-font-smoothing: antialiased; }
