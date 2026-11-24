@@ -39,7 +39,7 @@
   function load() {
     if (loading) return loading;
     /* v136: 새 회차는 덧붙임 파일(문제은행 data/kb_add.js)로 — kb.js(9MB)를 통째로 다시 올리지 않으려고. 못 받아도 예전 기출은 그대로 */
-    loading = Promise.all([remoteOr("data/kb.js", "data/kichul/bank.js").then(function () { if (BASE && figBase === BASE) return script(BASE + "data/kb_add.js?v=137").catch(function () { window.KB_ADD = null; }); }), script("data/kichul/brackets.js").catch(function () { window.KB_BRACKETS = {}; }),
+    loading = Promise.all([remoteOr("data/kb.js", "data/kichul/bank.js").then(function () { if (BASE && figBase === BASE) return script(BASE + "data/kb_add.js?v=141").catch(function () { window.KB_ADD = null; }); }), script("data/kichul/brackets.js").catch(function () { window.KB_BRACKETS = {}; }),
       script("data/kichul/brackets-manual.js").catch(function () { window.KB_BRACKETS_MANUAL = {}; }),
       window.MAP2015 ? Promise.resolve() : script("data/mapping-2015.js")]).then(function () {
       /* 사람이 정한 범위가 자동 추출보다 우선(같은 표시면 덮어씀) */

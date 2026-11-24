@@ -19,26 +19,33 @@
   /* ───────── 유틸 ───────── */
   function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
   function rich(s) { return esc(s).replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>").replace(/\n/g, "<br>"); }
-  function bank(s) { /* 문제은행 밑줄(U+FDD0~1)·글자 상자(U+FDD2~3) */
-    var h = esc(s), out = "", u = false, b = false;
-    if (!/[﷐-﷓]/.test(h)) return h;
-    for (var i = 0; i < h.length; i++) {
-      var c = h[i];
-      if (c === "﷐") { if (!u) { out += '<u class="ul">'; u = true; } }
-      else if (c === "﷑") { if (u) { out += "</u>"; u = false; } }
-      else if (c === "﷒") { if (!b) { out += '<span class="bx">'; b = true; } }
-      else if (c === "﷓") { if (b) { if (u) { out += "</u>"; u = false; } out += "</span>"; b = false; } }
-      else out += c;
-    }
-    return out + (u ? "</u>" : "") + (b ? "</span>" : "");
+  function bank(s) { /* 문제은행 표시: 밑줄(U+FDD0~1)·글자 상자(2~3)·굵은 글씨(4~5)·고딕(6~7) — v141 */
+    var h = esc(s);
+    if (!/[\uFDD0-\uFDD7]/.test(h)) return h;
+    return bankR(h);
   }
-  function plain(s) { return String(s == null ? "" : s).replace(/[﷐-﷓]/g, ""); }
+  var bankR = function (h) {
+    var out = "", u = 0, d = 0, g = 0, box = 0, i, k, nu, nd, ng;
+    function op() { return (g ? '<span class="gt">' : "") + (d ? '<b class="bd">' : "") + (u ? '<u class="ul">' : ""); }
+    function cl() { return (u ? "</u>" : "") + (d ? "</b>" : "") + (g ? "</span>" : ""); }
+    for (i = 0; i < h.length; i++) { k = h.charCodeAt(i);
+      if (k < 0xFDD0 || k > 0xFDD7) { out += h.charAt(i); continue; }
+      if (k === 0xFDD2 || k === 0xFDD3) { if ((k === 0xFDD2) === !!box) continue; out += cl() + (k === 0xFDD2 ? '<span class="bx">' : "</span>") + op(); box = k === 0xFDD2 ? 1 : 0; continue; }
+      nu = k === 0xFDD0 ? 1 : k === 0xFDD1 ? 0 : u; nd = k === 0xFDD4 ? 1 : k === 0xFDD5 ? 0 : d; ng = k === 0xFDD6 ? 1 : k === 0xFDD7 ? 0 : g;
+      if (nu === u && nd === d && ng === g) continue;
+      out += cl(); u = nu; d = nd; g = ng; out += op(); }
+    out += cl() + (box ? "</span>" : "");
+    for (i = 0; i < 3; i++) out = out.replace(/<span class="gt"><\/span>|<b class="bd"><\/b>|<u class="ul"><\/u>/g, "");
+    return out;
+  };
+
+  function plain(s) { return String(s == null ? "" : s).replace(/[\uFDD0-\uFDD7]/g, ""); }
   /* 꺾쇠: brs = [[표시, 쪽(R/L), 첫 줄 앞 글자, 끝 줄 뒤 글자]] (data/kichul/brackets.js)
      시험지처럼 묶인 부분 옆에 꺾음선을 긋고 표시([A])를 선 가운데에 둔다. 따로 떠 있던 [A] 글자는 지운다. */
   /* 대화 지문: 화자 표시(학생1:, 진행자 :, 부원 2: 등) 앞에서 줄을 바꾼다(시험지처럼). 화자 표시가 3번 이상일 때만 */
   function speakers(t) {
-    var re = /([.?!”’)…~])((?:\s+\[[A-E]\])?)\s+((?:[가-힣]{1,5}\s?\d{0,2})\s?:\s)/g;
-    if ((t.match(/(?:^|[\s])[가-힣]{1,5}\s?\d{0,2}\s?:\s/g) || []).length < 3) return t;
+    var re = /([.?!”’)…~][\uFDD0-\uFDD7]*)((?:\s+\[[A-E]\])?)\s+([\uFDD4-\uFDD7]*(?:[가-힣]{1,5}[\uFDD4-\uFDD7]*\s?[\uFDD4-\uFDD7]*\d{0,2})[\uFDD4-\uFDD7]*\s?:[\uFDD4-\uFDD7]*\s)/g;
+    if ((t.replace(/[\uFDD4-\uFDD7]/g, "").match(/(?:^|[\s])[가-힣]{1,5}\s?\d{0,2}\s?:\s/g) || []).length < 3) return t;
     return t.replace(re, "$1$2\n$3");
   }
   function bankBr(text, brs) {
