@@ -21,8 +21,8 @@
   function rich(s) { return esc(s).replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>").replace(/\n/g, "<br>"); }
   function bank(s) { /* 문제은행 표시: 밑줄(U+FDD0~1)·글자 상자(2~3)·굵은 글씨(4~5)·고딕(6~7) — v141 */
     var h = esc(s);
-    if (!/[\uFDD0-\uFDD7]/.test(h)) return h;
-    return bankR(h);
+    if (/[\uFDD0-\uFDD7]/.test(h)) h = bankR(h);
+    return h.indexOf("■◤") < 0 ? h : h.split("■◤").join('<img class="inl" src="/suneung-korean/fig/inl_shape01.png" alt="■◤">');   /* v142 */
   }
   var bankR = function (h) {
     var out = "", u = 0, d = 0, g = 0, box = 0, i, k, nu, nd, ng;
